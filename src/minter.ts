@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { NetworkConfig } from "./config.js";
 import { MintRequest, tokenIdFor } from "./mint-request.js";
+import { normalizePrivateKey } from "./private-key.js";
 
 const contractAbi = [
   "function mintCard(address recipient,uint256 tokenId,uint256 amount,string tokenUri,bytes32 requestHash) external",
@@ -32,7 +33,7 @@ export class NftMinter {
   constructor(options: MinterOptions) {
     this.network = options.network;
     this.provider = options.provider || new ethers.JsonRpcProvider(options.network.rpcUrl, options.network.chainId);
-    this.signer = options.signer || new ethers.Wallet(options.privateKey, this.provider);
+    this.signer = options.signer || new ethers.Wallet(normalizePrivateKey(options.privateKey), this.provider);
   }
 
   isConfigured(): boolean {

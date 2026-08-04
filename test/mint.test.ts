@@ -185,4 +185,32 @@ describe("POST /mint", () => {
       })
       .expect(401);
   });
+
+  it("rejects an invalid private key without echoing the configured value", () => {
+    const invalidPrivateKey = "replace-with-private-key";
+
+    expect(() => new NftMinter({
+      network: {
+        chain: "POLYGON_AMOY",
+        chainId: 80002,
+        rpcUrl: "https://polygon-amoy.drpc.org",
+        contractAddress: "0x0000000000000000000000000000000000000001"
+      },
+      privateKey: invalidPrivateKey
+    })).toThrow("MINTER_PRIVATE_KEY must be a 32-byte hex string.");
+
+    try {
+      new NftMinter({
+        network: {
+          chain: "POLYGON_AMOY",
+          chainId: 80002,
+          rpcUrl: "https://polygon-amoy.drpc.org",
+          contractAddress: "0x0000000000000000000000000000000000000001"
+        },
+        privateKey: invalidPrivateKey
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(invalidPrivateKey);
+    }
+  });
 });

@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "build": "tsc -p tsconfig.json",
     "test": "XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache hardhat compile && XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache vitest run",
     "test:watch": "vitest",
     "compile:contracts": "XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache hardhat compile",
-    "deploy": "tsx scripts/deploy.ts",
+    "deploy": "npm run compile:contracts && tsx scripts/deploy.ts",
     "check:network": "tsx scripts/check-network.ts",
     "lint:secrets": "rg -n \"PRIVATE_KEY|SECRET|TOKEN|API_KEY|MNEMONIC|PASSWORD|JWT|seed phrase|BEGIN .* PRIVATE KEY\" . --glob '!node_modules/**' --glob '!dist/**' --glob '!artifacts/**' --glob '!cache/**'"
   },
