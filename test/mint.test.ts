@@ -1,0 +1,188 @@
+import hre from "hardhat";
+import request from "supertest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app.js";
+import { AppConfig } from "../src/config.js";
+import { NftMinter } from "../src/minter.js";
+
+const baseCard = {
+  id: 123,
+  cardCode: "KOR-S01-COM-00001",
+  caseId: "CASE-KOR-S01-COM-00001-000001",
+  designId: "KOR-S01-COM-00001",
+  serialNo: 1,
+  seasonSerialNo: 1,
+  editionSize: 2500,
+  cardName: "Signal Kitten",
+  rarityCode: "COM",
+  seasonCode: "S01",
+  imageUrl: "https://metadata.example/cards/KOR-S01-COM-00001.png"
+};
+
+async function buildApp() {
+  const [deployer, recipient] = await hre.ethers.getSigners();
+  const factory = await hre.ethers.getContractFactory("KorionCardItems");
+  const contract = await factory.deploy("", deployer.address);
+  await contract.waitForDeployment();
+  const contractAddress = await contract.getAddress();
+
+  const config: AppConfig = {
+    port: 0,
+    apiKey: "test-api-key",
+    privateKey: "unused-test-key",
+    networkEnv: "hardhat",
+    network: {
+      chain: "POLYGON_AMOY",
+      chainId: 31337,
+      rpcUrl: "http://127.0.0.1:8545",
+      contractAddress
+    }
+  };
+  const minter = new NftMinter({
+    network: config.network,
+    privateKey: config.privateKey,
+    signer: deployer as never
+  });
+
+  return {
+    app: createApp({ config, minter }),
+    contract,
+    recipient
+  };
+}
+
+describe("POST /mint", () => {
+  let ctx: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeEach(async () => {
+    ctx = await buildApp();
+  });
+
+  it("mints one ERC-1155 card on the configured Polygon testnet profile", async () => {
+    const response = await request(ctx.app)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", "card-gatcha-nft:123")
+      .send({
+        idempotencyKey: "card-gatcha-nft:123",
+        chain: "POLYGON_AMOY",
+        contractAddress: await ctx.contract.getAddress(),
+        recipientAddress: ctx.recipient.address,
+        tokenUri: "https://metadata.example/cards/KOR-S01-COM-00001-000001.json",
+        card: baseCard
+      })
+      .expect(200);
+
+    expect(response.body.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    expect(response.body.contractAddress).toBe(await ctx.contract.getAddress());
+    expect(response.body.chain).toBe("POLYGON_AMOY");
+    expect(response.body.chainId).toBe(31337);
+    expect(response.body.tokenId).toMatch(/^[0-9]+$/);
+  });
+
+  it("returns the cached result for duplicate in-process idempotency keys", async () => {
+    const payload = {
+      idempotencyKey: "card-gatcha-nft:duplicate",
+      chain: "POLYGON_AMOY",
+      contractAddress: await ctx.contract.getAddress(),
+      recipientAddress: ctx.recipient.address,
+      tokenUri: "https://metadata.example/cards/duplicate.json",
+      card: { ...baseCard, id: 124, caseId: "CASE-KOR-S01-COM-00001-000002", serialNo: 2, seasonSerialNo: 2 }
+    };
+
+    const first = await request(ctx.app)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", payload.idempotencyKey)
+      .send(payload)
+      .expect(200);
+
+    const second = await request(ctx.app)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", payload.idempotencyKey)
+      .send(payload)
+      .expect(200);
+
+    expect(second.body).toEqual(first.body);
+  });
+
+  it("resolves duplicate idempotency keys from on-chain events after app restart", async () => {
+    const [deployer] = await hre.ethers.getSigners();
+    const contractAddress = await ctx.contract.getAddress();
+    const config: AppConfig = {
+      port: 0,
+      apiKey: "test-api-key",
+      privateKey: "unused-test-key",
+      networkEnv: "hardhat",
+      network: {
+        chain: "POLYGON_AMOY",
+        chainId: 31337,
+        rpcUrl: "http://127.0.0.1:8545",
+        contractAddress
+      }
+    };
+    const restartedApp = createApp({
+      config,
+      minter: new NftMinter({
+        network: config.network,
+        privateKey: config.privateKey,
+        signer: deployer as never
+      })
+    });
+    const payload = {
+      idempotencyKey: "card-gatcha-nft:restart",
+      chain: "POLYGON_AMOY",
+      contractAddress,
+      recipientAddress: ctx.recipient.address,
+      tokenUri: "https://metadata.example/cards/restart.json",
+      card: { ...baseCard, id: 125, caseId: "CASE-KOR-S01-COM-00001-000003", serialNo: 3, seasonSerialNo: 3 }
+    };
+
+    const first = await request(ctx.app)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", payload.idempotencyKey)
+      .send(payload)
+      .expect(200);
+
+    const second = await request(restartedApp)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", payload.idempotencyKey)
+      .send(payload)
+      .expect(200);
+
+    expect(second.body).toEqual(first.body);
+  });
+
+  it("rejects mismatched chain requests before signing", async () => {
+    await request(ctx.app)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", "card-gatcha-nft:wrong-chain")
+      .send({
+        idempotencyKey: "card-gatcha-nft:wrong-chain",
+        chain: "TRON",
+        contractAddress: await ctx.contract.getAddress(),
+        recipientAddress: ctx.recipient.address,
+        card: baseCard
+      })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body.code).toBe("CHAIN_MISMATCH");
+      });
+  });
+
+  it("requires the configured API key", async () => {
+    await request(ctx.app)
+      .post("/mint")
+      .send({
+        idempotencyKey: "card-gatcha-nft:no-auth",
+        chain: "POLYGON_AMOY",
+        recipientAddress: ctx.recipient.address,
+        card: baseCard
+      })
+      .expect(401);
+  });
+});

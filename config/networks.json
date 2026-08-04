@@ -1,0 +1,16 @@
+{
+  "polygon-amoy": {
+    "chain": "POLYGON_AMOY",
+    "chainId": 80002,
+    "rpcUrl": "https://polygon-amoy.drpc.org",
+    "contractAddress": "",
+    "blockExplorerUrl": "https://amoy.polygonscan.com"
+  },
+  "polygon-mainnet": {
+    "chain": "POLYGON",
+    "chainId": 137,
+    "rpcUrl": "https://polygon.drpc.org",
+    "contractAddress": "",
+    "blockExplorerUrl": "https://polygonscan.com"
+  }
+}

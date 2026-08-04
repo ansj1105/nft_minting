@@ -1,0 +1,35 @@
+{
+  "name": "nft_minting",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache hardhat compile && XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache vitest run",
+    "test:watch": "vitest",
+    "compile:contracts": "XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache hardhat compile",
+    "deploy": "tsx scripts/deploy.ts",
+    "check:network": "tsx scripts/check-network.ts",
+    "lint:secrets": "rg -n \"PRIVATE_KEY|SECRET|TOKEN|API_KEY|MNEMONIC|PASSWORD|JWT|seed phrase|BEGIN .* PRIVATE KEY\" . --glob '!node_modules/**' --glob '!dist/**' --glob '!artifacts/**' --glob '!cache/**'"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@openzeppelin/contracts": "^5.1.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "@types/supertest": "^6.0.2",
+    "hardhat": "^2.22.18",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
