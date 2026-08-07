@@ -23,6 +23,13 @@ describe("loadAppConfig", () => {
         rpcUrl: "https://polygon-rpc.com",
         contractAddress: "",
         blockExplorerUrl: "https://polygonscan.com"
+      },
+      "ethereum-sepolia": {
+        chain: "ETHEREUM_SEPOLIA",
+        chainId: 11155111,
+        rpcUrl: "https://sepolia.drpc.org",
+        contractAddress: "",
+        blockExplorerUrl: "https://sepolia.etherscan.io"
       }
     }));
 
@@ -39,5 +46,18 @@ describe("loadAppConfig", () => {
     expect(config.network.chainId).toBe(80002);
     expect(config.network.contractAddress).toBe("0x0000000000000000000000000000000000000001");
     expect(config.network.deploymentBlock).toBe(0);
+  });
+
+  it("selects Ethereum Sepolia from the same config map", () => {
+    const config = loadAppConfig({
+      NETWORK_ENV: "ethereum-sepolia",
+      NETWORK_CONFIG_PATH: path.resolve("config/networks.json"),
+      MINTER_PRIVATE_KEY: "replace-with-private-key",
+      MINTER_API_KEY: "test-api-key"
+    });
+
+    expect(config.network.chain).toBe("ETHEREUM_SEPOLIA");
+    expect(config.network.chainId).toBe(11155111);
+    expect(config.network.contractAddress).toBe("");
   });
 });

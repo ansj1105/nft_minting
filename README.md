@@ -10,8 +10,15 @@ Set `NETWORK_ENV`:
 
 - `polygon-amoy`: Polygon Amoy testnet
 - `polygon-mainnet`: Polygon PoS mainnet
+- `ethereum-sepolia`: Ethereum Sepolia testnet
+- `ethereum-mainnet`: Ethereum mainnet
 
 Defaults live in `config/networks.json`. Runtime env values `RPC_URL`, `CHAIN_ID`, and `CONTRACT_ADDRESS` override the selected config map entry.
+
+The same ERC-1155 contract code can be deployed to each EVM network, but each
+network needs its own funded minter wallet, contract address, and deployment
+block. Ethereum entries intentionally ship without a contract address, so
+minting remains blocked until those runtime values are supplied and tested.
 
 ## Required Env
 

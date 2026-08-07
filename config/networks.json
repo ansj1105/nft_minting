@@ -13,5 +13,19 @@
     "rpcUrl": "https://polygon.drpc.org",
     "contractAddress": "",
     "blockExplorerUrl": "https://polygonscan.com"
+  },
+  "ethereum-sepolia": {
+    "chain": "ETHEREUM_SEPOLIA",
+    "chainId": 11155111,
+    "rpcUrl": "https://sepolia.drpc.org",
+    "contractAddress": "",
+    "blockExplorerUrl": "https://sepolia.etherscan.io"
+  },
+  "ethereum-mainnet": {
+    "chain": "ETHEREUM",
+    "chainId": 1,
+    "rpcUrl": "https://ethereum.drpc.org",
+    "contractAddress": "",
+    "blockExplorerUrl": "https://etherscan.io"
   }
 }
