@@ -17,7 +17,7 @@
   "ethereum-sepolia": {
     "chain": "ETHEREUM_SEPOLIA",
     "chainId": 11155111,
-    "rpcUrl": "https://sepolia.drpc.org",
+    "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
     "contractAddress": "",
     "blockExplorerUrl": "https://sepolia.etherscan.io"
   },

@@ -916,10 +916,12 @@ Expected: all pass before reporting the system ready.
 
 ## Remaining Gates
 
-1. Run the existing `coin_csms` admin mint endpoint against an explicitly selected disposable test card and recipient Amoy wallet. Verify the card/job state, one on-chain mint event, and idempotent retry. Do not select an arbitrary production-ready card.
-2. Publish immutable card metadata and set `CARD_GATCHA_NFT_METADATA_BASE_URL`; the smoke mint URI is only a placeholder and is not production metadata.
-3. Add and review an `nft_minting` deployment workflow on the repository-scoped `deploy-role` runner. Manual deployment is currently in use; a push does not deploy automatically.
-4. Pass mainnet acceptance only after the Amoy E2E and metadata gate. Create a separate mainnet wallet and secrets, deploy a new mainnet contract, run a controlled mainnet smoke mint, then enable mainnet `coin_csms` configuration.
+1. Card `6951` Amoy E2E is complete: issued token `152313847548938606834917230208834693034`, transaction `0x1a266ab57da005ec598f690688334e7bcff1016cebd753b4ce83452aade5cd80`, and the duplicate request returned the existing mint.
+2. Publish immutable card metadata and configure both `CARD_GATCHA_NFT_METADATA_BASE_URL` and `CARD_GATCHA_NFT_ASSET_BASE_URL`. The worker now blocks when either public HTTPS origin is missing, but the runtime origins are not configured yet.
+3. Publish the revised `nft_minting` workflow that verifies on a GitHub-hosted runner, delivers a Git bundle from `deploy-role`, health-checks a candidate, and restores the previous container on swap failure.
+4. Deploy the follow-up Foxya/CSMS/frontend fixes and complete authenticated Playwright verification of the issued card screen.
+5. Deploy and test the Sepolia contract before any Ethereum mainnet work.
+6. Pass mainnet acceptance only after the metadata, Amoy browser E2E, and Sepolia gates. Create separate mainnet wallets and contracts; never reuse testnet signing keys.
 
 ## Self-Review
 

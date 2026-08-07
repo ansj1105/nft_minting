@@ -15,27 +15,38 @@
 
 ## Remaining: Safe Deployment
 
-- [ ] Review and add the user withdrawal OpenAPI contract and focused backend tests.
+- [x] Review and add the user withdrawal OpenAPI contract and focused backend repository tests.
 - [x] Add focused `coin_csms` approval test for `WITHDRAWAL_REQUESTED`.
-- [ ] Add focused card-detail UI tests for address validation, submit lock, pending, and issued state.
-- [ ] Deploy `fox_coin`, `coin_csms`, and `fox_coin_frontend` through a rolling/candidate health-check path. Do not use a command that replaces both `foxya-api` replicas at once.
-- [ ] Verify deployed health endpoints and the authenticated card-detail route before touching card data.
+- [x] Add focused card-detail UI tests for address validation, submit lock, pending, issued token data, and explorer link.
+- [x] Deploy the original withdrawal flow to `fox_coin`, `coin_csms`, and `fox_coin_frontend` through the established health-gated paths.
+- [x] Verify deployed health endpoints and the card-detail route before touching card data.
+- [ ] Publish and deploy the 2026-08-08 follow-up fixes: canonical `nftEnabled`, persisted `nftChain`, chain-aware issued-state UI, public metadata guard, and Git-bundle minter workflow.
 
 ## Remaining: Card 6951 E2E
 
 - [x] Confirm `cardId=6951` still belongs to `user_id=1808`, is `OWNED`, NFT-enabled, and unissued.
-- [ ] Upload one clearly marked test original through the existing administrator endpoint; keep automatic workers disabled.
-- [ ] Submit one user withdrawal request with a dedicated Amoy recipient address.
-- [ ] Verify the persisted recipient and `WITHDRAWAL_REQUESTED` state through the canonical user card response.
-- [ ] Approve through the existing administrator endpoint and verify `READY_TO_MINT`.
-- [ ] Mint once through the administrator endpoint and verify `ISSUED`, token ID, transaction hash, and exactly one Amoy `TransferSingle` event.
-- [ ] Retry the same administrator mint request and verify no additional on-chain event is created.
+- [x] Upload one clearly marked test original through the existing administrator endpoint; keep automatic workers disabled.
+- [x] Submit one user withdrawal request with a dedicated Amoy recipient address.
+- [x] Verify the persisted recipient and `WITHDRAWAL_REQUESTED` state through the canonical user card response.
+- [x] Approve through the existing administrator endpoint and verify `READY_TO_MINT`.
+- [x] Mint once through the administrator endpoint and verify `ISSUED`, token ID, transaction hash, and exactly one Amoy `TransferSingle` event.
+- [x] Retry the same administrator mint request and verify no additional on-chain event is created.
 - [ ] Verify the deployed card-detail screen shows the pending and issued states correctly.
+- [ ] Verify the issued card response and explorer link use the persisted minting chain.
 
 ## Remaining: Testnet Acceptance And Mainnet Gate
 
 - [ ] Publish immutable card metadata and set `CARD_GATCHA_NFT_METADATA_BASE_URL`; do not use the smoke-mint placeholder URI for a real card.
-- [ ] Record E2E evidence: card ID, request time, token ID, transaction hash, and idempotency retry result. Do not record secrets.
-- [ ] Keep automated NFT workers disabled until the controlled E2E is accepted.
+- [ ] Set `CARD_GATCHA_NFT_ASSET_BASE_URL` to the public HTTPS origin used by metadata JSON; never write `s3://` as the NFT image URI.
+- [x] Record E2E evidence: card `6951`, token ID `152313847548938606834917230208834693034`, transaction `0x1a266ab57da005ec598f690688334e7bcff1016cebd753b4ce83452aade5cd80`, and idempotent retry result.
+- [x] Keep automated NFT workers disabled until the public metadata gate and follow-up deploy pass.
 - [ ] Create a separate mainnet wallet and secrets only after Amoy acceptance; never reuse the Amoy private key.
 - [ ] Deploy a separate mainnet contract, run controlled mainnet smoke mint, then review mainnet enablement.
+
+## Ethereum
+
+- [x] Add config-map profiles for `ethereum-sepolia` and `ethereum-mainnet`.
+- [ ] Verify the dedicated testnet minter has Sepolia ETH without printing its private key.
+- [ ] Deploy the ERC-1155 contract to Sepolia and record its deployment block.
+- [ ] Run direct and `coin_csms` Sepolia mint/idempotency E2E.
+- [ ] Keep Ethereum mainnet blocked until Sepolia and metadata acceptance pass.

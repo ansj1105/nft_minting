@@ -10,25 +10,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm audit --omit=dev
+      - run: npm run lint:secrets
+
   deploy:
+    needs: verify
     runs-on: [self-hosted, linux, x64, production, deploy]
     timeout-minutes: 15
     env:
       DEPLOY_SHA: ${{ github.sha }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Deploy candidate and verify health
         run: |
+          bundle="$RUNNER_TEMP/nft-minting-${DEPLOY_SHA}.bundle"
+          remote_bundle="/tmp/nft-minting-${DEPLOY_SHA}.bundle"
+          git bundle create "$bundle" HEAD
+          scp -o BatchMode=yes -o ConnectTimeout=15 "$bundle" ubuntu@52.200.97.155:"$remote_bundle"
+
           ssh -o BatchMode=yes -o ConnectTimeout=15 ubuntu@52.200.97.155 "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
 
           app_dir=/var/www/nft_minting/app
           image="korion/nft-minting:${DEPLOY_SHA}"
           candidate=nft-minting-candidate
+          previous=nft-minting-previous
+          remote_bundle="/tmp/nft-minting-${DEPLOY_SHA}.bundle"
 
           cd "$app_dir"
-          sudo git -C "$app_dir" fetch --quiet origin main
+          test -z "$(sudo git -C "$app_dir" status --short)"
+          sudo git -C "$app_dir" fetch --quiet "$remote_bundle" HEAD
           sudo git -C "$app_dir" checkout --detach --quiet "$DEPLOY_SHA"
           test "$(sudo git -C "$app_dir" rev-parse HEAD)" = "$DEPLOY_SHA"
+          rm -f "$remote_bundle"
 
           sudo docker build --pull -t "$image" .
           sudo docker rm -f "$candidate" >/dev/null 2>&1 || true
@@ -48,7 +76,17 @@ jobs:
             sleep 2
           done
 
-          sudo docker rm -f nft-minting >/dev/null 2>&1 || true
+          sudo docker rm -f "$previous" >/dev/null 2>&1 || true
+          if sudo docker inspect nft-minting >/dev/null 2>&1; then
+            sudo docker rename nft-minting "$previous"
+          fi
           sudo docker rename "$candidate" nft-minting
-          sudo docker exec nft-minting wget -qO- http://127.0.0.1:8088/health
+          if ! sudo docker exec nft-minting wget -qO- http://127.0.0.1:8088/health; then
+            sudo docker rm -f nft-minting >/dev/null 2>&1 || true
+            if sudo docker inspect "$previous" >/dev/null 2>&1; then
+              sudo docker rename "$previous" nft-minting
+            fi
+            exit 1
+          fi
+          sudo docker rm -f "$previous" >/dev/null 2>&1 || true
           REMOTE
