@@ -20,7 +20,7 @@
 - [x] Add focused card-detail UI tests for address validation, submit lock, pending, issued token data, and explorer link.
 - [x] Deploy the original withdrawal flow to `fox_coin`, `coin_csms`, and `fox_coin_frontend` through the established health-gated paths.
 - [x] Verify deployed health endpoints and the card-detail route before touching card data.
-- [ ] Publish and deploy the 2026-08-08 follow-up fixes: canonical `nftEnabled`, persisted `nftChain`, chain-aware issued-state UI, public metadata guard, and Git-bundle minter workflow.
+- [x] Publish and deploy the 2026-08-08 follow-up fixes: canonical `nftEnabled`, persisted `nftChain`, chain-aware issued-state UI, public metadata guard, and Git-bundle minter workflow.
 
 ## Remaining: Card 6951 E2E
 
@@ -31,8 +31,8 @@
 - [x] Approve through the existing administrator endpoint and verify `READY_TO_MINT`.
 - [x] Mint once through the administrator endpoint and verify `ISSUED`, token ID, transaction hash, and exactly one Amoy `TransferSingle` event.
 - [x] Retry the same administrator mint request and verify no additional on-chain event is created.
-- [ ] Verify the deployed card-detail screen shows the pending and issued states correctly.
-- [ ] Verify the issued card response and explorer link use the persisted minting chain.
+- [x] Verify the deployed card-detail screen shows the issued state, token ID, recipient, and completed action correctly.
+- [x] Verify the issued card response and explorer link use persisted `nftChain=POLYGON_AMOY` and `amoy.polygonscan.com`.
 
 ## Remaining: Testnet Acceptance And Mainnet Gate
 
@@ -46,7 +46,8 @@
 ## Ethereum
 
 - [x] Add config-map profiles for `ethereum-sepolia` and `ethereum-mainnet`.
-- [ ] Verify the dedicated testnet minter has Sepolia ETH without printing its private key.
+- [x] Check the dedicated testnet minter balance without printing its private key; confirmed `0 ETH`.
+- [ ] Fund the dedicated testnet minter with Sepolia ETH.
 - [ ] Deploy the ERC-1155 contract to Sepolia and record its deployment block.
 - [ ] Run direct and `coin_csms` Sepolia mint/idempotency E2E.
 - [ ] Keep Ethereum mainnet blocked until Sepolia and metadata acceptance pass.

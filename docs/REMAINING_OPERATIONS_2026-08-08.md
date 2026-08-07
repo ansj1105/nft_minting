@@ -15,13 +15,20 @@
 
 ## 1. 현재 로컬 변경 배포
 
-- [ ] `fox_coin`: `nftEnabled`를 사용자 카드 응답에 포함하고 출금 UPDATE에서 디자인 NFT 허용 여부 확인
-- [ ] `card_cloud_flyway`: V40으로 민팅 체인(`nft_chain`) 저장 컬럼과 허용값 제약 추가
-- [ ] `fox_coin_frontend`: 발급 완료 Token ID, 수신 주소, 민팅 체인별 explorer 링크 표시
-- [ ] `coin_csms`: 공개 HTTPS 메타데이터·이미지 URL이 없으면 자동 민팅 차단
-- [ ] `nft_minting`: GitHub-hosted 검증 후 deploy-role Git bundle 전달, candidate health gate, swap rollback 적용
-- [ ] 최신 사용자 메시지에서 커밋·푸시·배포 권한을 받은 뒤 Flyway -> CSMS -> Foxya -> frontend -> minter 순서로 게시
-- [ ] 배포 후 Foxya rolling health, CSMS health, minter health, 카드 상세 Playwright 검증
+- [x] `fox_coin`: `nftEnabled`를 사용자 카드 응답에 포함하고 출금 UPDATE에서 디자인 NFT 허용 여부 확인 (`62680c25`)
+- [x] `card_cloud_flyway`: V40으로 민팅 체인(`nft_chain`) 저장 컬럼과 허용값 제약 추가 (`0d4f097`)
+- [x] `fox_coin_frontend`: 발급 완료 Token ID, 수신 주소, 민팅 체인별 explorer 링크 표시 (`bdb32163`)
+- [x] `coin_csms`: 공개 HTTPS 메타데이터·이미지 URL이 없으면 자동 민팅 차단 (`7a6bd6c`)
+- [x] `nft_minting`: GitHub-hosted 검증 후 deploy-role Git bundle 전달, candidate health gate, swap rollback 적용 (`d520928`)
+- [x] Flyway -> CSMS -> Foxya -> frontend -> minter 순서로 운영 반영
+- [x] Foxya rolling health, CSMS health, minter health, 카드 상세 Playwright 검증
+
+배포 검증 결과:
+
+- Foxya app/app2 모두 Docker health `healthy`, 외부 `https://api.korion.io.kr/health` 응답 `UP`
+- CSMS와 minter health 통과, minter runtime은 `polygon-amoy`, chain ID `80002`
+- 카드 `6951` 화면에서 발급 완료, Token ID, Amoy explorer 링크 표시 확인
+- Playwright: route `200`, failed request `0`, fatal console error `0`
 
 ## 2. 비공개 S3에 CloudFront 연결
 
@@ -94,3 +101,4 @@ CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false
 - Sepolia minter balance가 `0 ETH`라 현재 계약 배포 불가
 - EC2 role에는 CloudFront 조회/생성 및 S3 bucket-policy 조회 권한이 없음
 - 실제 AWS 공개 origin 구성은 AWS 관리자 권한이 있는 사용자 작업이 필요
+- 공개 메타데이터 URL이 준비되기 전까지 자동 NFT worker는 의도적으로 비활성 유지
