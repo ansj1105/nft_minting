@@ -53,7 +53,9 @@ Do not paste real env values into chat or docs.
 - Docker deploys should keep the service internal or loopback-bound.
 - `POST /mint` must require `X-API-Key` and idempotency.
 - Browser frontend code must not call this service directly.
-- `coin_csms` NFT env values must remain unset/blocked until a real minter URL, API key, and contract address exist.
+- The Amoy minter is deployed as an internal `coin-shared` Docker service. `coin_csms` may call it only with its shared API key; do not publish a host port or permit browser access.
+- Automatic card-gatcha NFT workers stay disabled until a controlled admin E2E mint of an explicitly chosen disposable test card passes.
+- The current Amoy contract is `0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022`. Mainnet needs a separately funded wallet, contract deployment, and a fresh acceptance gate.
 
 ## Current Work Plan
 

@@ -905,15 +905,21 @@ Expected: all pass before reporting the system ready.
 
 ---
 
-## Known Blockers
+## Current Amoy Deployment State (2026-08-07)
 
-- No real Amoy minter private key has been provided.
-- No Amoy test POL funding has been confirmed.
-- No Amoy contract address exists yet.
-- No deployment target has been selected for the minter service.
-- No runtime secret store has been configured.
-- `coin_csms` production NFT minter env must remain blocked until the deployed minter URL, API key, and contract address are real.
-- Polygon mainnet deployment is blocked until Amoy E2E is accepted.
+- Dedicated Amoy runtime secrets exist outside git in root-only server storage; no private key or API key is recorded here.
+- The Amoy minter wallet is funded and the ERC-1155 contract is deployed at `0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022`.
+- A direct smoke mint succeeded: transaction `0x6295d56d5f53a42c2a9a792c18b71bae5798ce47581e43473273796e598d99d2`, token ID `105399837019275416255836110657727333246`.
+- `nft_minting` is deployed on the `coin_csms` host as an internal `coin-shared` Docker service and its health endpoint reports Polygon Amoy, chain ID `80002`, and a configured contract.
+- `coin_csms` runtime is configured to call the internal minter. Both automatic NFT workers are deliberately disabled until a controlled administrator E2E test completes.
+- Idempotency event lookup starts at the configured deployment block, avoiding RPC free-tier historical-range failures after a service restart.
+
+## Remaining Gates
+
+1. Run the existing `coin_csms` admin mint endpoint against an explicitly selected disposable test card and recipient Amoy wallet. Verify the card/job state, one on-chain mint event, and idempotent retry. Do not select an arbitrary production-ready card.
+2. Publish immutable card metadata and set `CARD_GATCHA_NFT_METADATA_BASE_URL`; the smoke mint URI is only a placeholder and is not production metadata.
+3. Add and review an `nft_minting` deployment workflow on the repository-scoped `deploy-role` runner. Manual deployment is currently in use; a push does not deploy automatically.
+4. Pass mainnet acceptance only after the Amoy E2E and metadata gate. Create a separate mainnet wallet and secrets, deploy a new mainnet contract, run a controlled mainnet smoke mint, then enable mainnet `coin_csms` configuration.
 
 ## Self-Review
 
