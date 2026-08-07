@@ -56,6 +56,7 @@ Do not paste real env values into chat or docs.
 - The Amoy minter is deployed as an internal `coin-shared` Docker service. `coin_csms` may call it only with its shared API key; do not publish a host port or permit browser access.
 - Automatic card-gatcha NFT workers stay disabled until a controlled admin E2E mint of an explicitly chosen disposable test card passes.
 - The current Amoy contract is `0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022`. Mainnet needs a separately funded wallet, contract deployment, and a fresh acceptance gate.
+- Deployment authority: deploy from `deploy-role` (`44.204.112.143`) as `deployer` only. That host owns GitHub authentication and the runner SSH key; the minter host must not be given GitHub credentials or any copied private keys. Sync the approved `main` commit by Git bundle, preserve host `.env`, then use the minter's candidate-health-and-swap workflow. Verify `/health` reports `polygon-amoy`, chain ID `80002`, and `contractConfigured=true` without printing runtime environment values.
 
 ## Current Work Plan
 
