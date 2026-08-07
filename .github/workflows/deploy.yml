@@ -1,0 +1,54 @@
+name: Deploy NFT Minter
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: nft-minting-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, production, deploy]
+    timeout-minutes: 15
+    env:
+      DEPLOY_SHA: ${{ github.sha }}
+    steps:
+      - name: Deploy candidate and verify health
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 ubuntu@52.200.97.155 "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          app_dir=/var/www/nft_minting/app
+          image="korion/nft-minting:${DEPLOY_SHA}"
+          candidate=nft-minting-candidate
+
+          cd "$app_dir"
+          git fetch --quiet origin main
+          git checkout --detach --quiet "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+
+          sudo docker build --pull -t "$image" .
+          sudo docker rm -f "$candidate" >/dev/null 2>&1 || true
+          sudo docker run -d --name "$candidate" --restart unless-stopped \
+            --network coin-shared \
+            --env-file /etc/korion/nft-minting/amoy.env \
+            "$image" >/dev/null
+
+          for attempt in $(seq 1 20); do
+            if sudo docker exec "$candidate" wget -qO- http://127.0.0.1:8088/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 20 ]; then
+              sudo docker logs "$candidate" >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          sudo docker rm -f nft-minting >/dev/null 2>&1 || true
+          sudo docker rename "$candidate" nft-minting
+          sudo docker exec nft-minting wget -qO- http://127.0.0.1:8088/health
+          REMOTE
