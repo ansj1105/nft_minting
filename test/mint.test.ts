@@ -1,6 +1,6 @@
 import hre from "hardhat";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { AppConfig } from "../src/config.js";
 import { NftMinter } from "../src/minter.js";
@@ -154,6 +154,58 @@ describe("POST /mint", () => {
       .expect(200);
 
     expect(second.body).toEqual(first.body);
+  });
+
+  it("queries duplicate mint events from the configured deployment block", async () => {
+    const [deployer] = await hre.ethers.getSigners();
+    const deploymentReceipt = await ctx.contract.deploymentTransaction()!.wait();
+    const contractAddress = await ctx.contract.getAddress();
+    const config: AppConfig = {
+      port: 0,
+      apiKey: "test-api-key",
+      privateKey: "unused-test-key",
+      networkEnv: "hardhat",
+      network: {
+        chain: "POLYGON_AMOY",
+        chainId: 31337,
+        rpcUrl: "http://127.0.0.1:8545",
+        contractAddress
+      }
+    };
+    Object.assign(config.network, { deploymentBlock: deploymentReceipt!.blockNumber });
+    const restartedApp = createApp({
+      config,
+      minter: new NftMinter({
+        network: config.network,
+        privateKey: config.privateKey,
+        signer: deployer as never
+      })
+    });
+    const payload = {
+      idempotencyKey: "card-gatcha-nft:deployment-block",
+      chain: "POLYGON_AMOY",
+      contractAddress,
+      recipientAddress: ctx.recipient.address,
+      tokenUri: "https://metadata.example/cards/deployment-block.json",
+      card: { ...baseCard, id: 126, caseId: "CASE-KOR-S01-COM-00001-000004", serialNo: 4, seasonSerialNo: 4 }
+    };
+
+    await request(ctx.app)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", payload.idempotencyKey)
+      .send(payload)
+      .expect(200);
+
+    const getLogs = vi.spyOn(hre.ethers.provider, "getLogs");
+    await request(restartedApp)
+      .post("/mint")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", payload.idempotencyKey)
+      .send(payload)
+      .expect(200);
+
+    expect(getLogs).toHaveBeenCalledWith(expect.objectContaining({ fromBlock: deploymentReceipt!.blockNumber }));
   });
 
   it("rejects mismatched chain requests before signing", async () => {

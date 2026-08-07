@@ -20,6 +20,7 @@ async function main() {
   const artifact = await hre.artifacts.readArtifact("KorionCardItems");
   const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, deployer);
   const contract = await factory.deploy("", deployer.address) as ethers.Contract;
+  const deploymentReceipt = await contract.deploymentTransaction()!.wait();
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   const minterRole = await contract.MINTER_ROLE();
@@ -34,6 +35,7 @@ async function main() {
     chainId: config.network.chainId,
     deployer: deployer.address,
     contractAddress: address,
+    deploymentBlock: deploymentReceipt!.blockNumber,
     deployerHasMinterRole
   }, null, 2));
 }

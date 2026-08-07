@@ -91,7 +91,7 @@ export class NftMinter {
     request: MintRequest
   ): Promise<MintResult | null> {
     const filter = contract.filters.CardMinted(requestHash);
-    const events = await contract.queryFilter(filter, 0, "latest");
+    const events = await contract.queryFilter(filter, this.network.deploymentBlock ?? 0, "latest");
     const event = events.at(-1);
     if (!event || !("args" in event) || !event.args) {
       return null;

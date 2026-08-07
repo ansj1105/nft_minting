@@ -7,6 +7,7 @@ const networkConfigSchema = z.object({
   chainId: z.number().int().positive(),
   rpcUrl: z.string().url(),
   contractAddress: z.string(),
+  deploymentBlock: z.number().int().nonnegative().optional(),
   blockExplorerUrl: z.string().url().optional()
 });
 
@@ -36,6 +37,16 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!Number.isInteger(chainId) || chainId <= 0) {
     throw new Error("CHAIN_ID must be a positive integer.");
   }
+  const deploymentBlock = env.CONTRACT_DEPLOYMENT_BLOCK
+    ? Number(env.CONTRACT_DEPLOYMENT_BLOCK)
+    : selected.deploymentBlock;
+  if (deploymentBlock !== undefined && (!Number.isInteger(deploymentBlock) || deploymentBlock < 0)) {
+    throw new Error("CONTRACT_DEPLOYMENT_BLOCK must be a non-negative integer.");
+  }
+  const contractAddress = env.CONTRACT_ADDRESS || selected.contractAddress;
+  if (contractAddress && deploymentBlock === undefined) {
+    throw new Error("CONTRACT_DEPLOYMENT_BLOCK is required when CONTRACT_ADDRESS is configured.");
+  }
 
   return {
     port: Number(env.PORT || 8088),
@@ -46,7 +57,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...selected,
       chainId,
       rpcUrl: env.RPC_URL || selected.rpcUrl,
-      contractAddress: env.CONTRACT_ADDRESS || selected.contractAddress
+      contractAddress,
+      deploymentBlock
     }
   };
 }

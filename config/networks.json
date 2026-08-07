@@ -3,7 +3,8 @@
     "chain": "POLYGON_AMOY",
     "chainId": 80002,
     "rpcUrl": "https://polygon-amoy.drpc.org",
-    "contractAddress": "",
+    "contractAddress": "0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022",
+    "deploymentBlock": 44293291,
     "blockExplorerUrl": "https://amoy.polygonscan.com"
   },
   "polygon-mainnet": {

@@ -14,6 +14,7 @@ describe("loadAppConfig", () => {
         chainId: 80002,
         rpcUrl: "https://rpc-amoy.polygon.technology",
         contractAddress: "",
+        deploymentBlock: undefined,
         blockExplorerUrl: "https://amoy.polygonscan.com"
       },
       "polygon-mainnet": {
@@ -29,6 +30,7 @@ describe("loadAppConfig", () => {
       NETWORK_ENV: "polygon-amoy",
       NETWORK_CONFIG_PATH: configPath,
       CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000001",
+      CONTRACT_DEPLOYMENT_BLOCK: "0",
       MINTER_PRIVATE_KEY: "replace-with-private-key",
       MINTER_API_KEY: "test-api-key"
     });
@@ -36,5 +38,6 @@ describe("loadAppConfig", () => {
     expect(config.network.chain).toBe("POLYGON_AMOY");
     expect(config.network.chainId).toBe(80002);
     expect(config.network.contractAddress).toBe("0x0000000000000000000000000000000000000001");
+    expect(config.network.deploymentBlock).toBe(0);
   });
 });
