@@ -50,4 +50,7 @@
 - [x] Fund the dedicated testnet minter with Sepolia ETH.
 - [x] Deploy the ERC-1155 contract to Sepolia and record deployment block `11444619`.
 - [x] Run direct and `coin_csms` Sepolia mint/idempotency E2E (card `3902`, tx `0xf57de983b43dd4499508f1a124a7f893bb07c746ffc141e77b41c14a3afbd5d7`, one event).
-- [ ] Keep Ethereum mainnet blocked until Sepolia and metadata acceptance pass.
+- [x] Verify the deployed card response and Sepolia Etherscan link use `nftChain=ETHEREUM_SEPOLIA`.
+- [x] Enable the Polygon Amoy automatic worker and verify card `3897` reaches `ISSUED` with one event and an idempotent retry.
+- [x] Keep the S3 import worker disabled because automatic bucket discovery is not currently required.
+- [x] Keep Ethereum mainnet blocked until a separate mainnet wallet and contract are explicitly approved.

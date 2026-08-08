@@ -9,7 +9,7 @@
 - `coin_csms -> nft_minting -> Polygon Amoy` 연결 완료
 - 카드 `6951` Token ID: `152313847548938606834917230208834693034`
 - 카드 `6951` transaction: `0x1a266ab57da005ec598f690688334e7bcff1016cebd753b4ce83452aade5cd80`
-- 자동 민팅 워커와 S3 import worker는 운영에서 비활성 상태
+- 자동 민팅 워커는 운영에서 활성 상태이며 S3 import worker는 비활성 상태
 - Ethereum Sepolia minter 공개 주소: `0x5A93682B7028f50F302db70c37a99eC6B3bd20e2`
 - Sepolia ERC-1155: `0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022` (deployment block `11444619`)
 - Sepolia 잔액: `0.04808858635804417 ETH` (E2E 후)
@@ -72,12 +72,21 @@ CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false
 
 ## 4. 자동 워커 활성화
 
-- [ ] 3번 테스트가 모두 통과한 뒤 `CARD_GATCHA_NFT_WORKER_ENABLED=true`
-- [ ] S3 자동 import가 필요할 때만 `CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=true`
-- [ ] CSMS candidate health 확인 후 managed container 교체
-- [ ] 처리할 작업이 없는 상태에서 worker 오류 로그가 발생하지 않는지 확인
-- [ ] 테스트 카드 1장으로 `READY_TO_MINT -> MINT_REQUESTED -> ISSUED` 자동 전이 확인
-- [ ] 실패 작업이 재시도되더라도 같은 request ID로 중복 민팅되지 않는지 확인
+- [x] 3번 테스트 통과 후 `CARD_GATCHA_NFT_WORKER_ENABLED=true`
+- [x] S3 자동 import는 현재 불필요하므로 `CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false` 유지
+- [x] CSMS candidate health 확인 후 managed container 교체
+- [x] 처리할 작업이 없는 상태에서 worker 오류 로그가 발생하지 않는지 확인
+- [x] 테스트 카드 `3897`로 `READY_TO_MINT -> MINT_REQUESTED -> ISSUED` 자동 전이 확인
+- [x] 같은 request ID 재요청이 기존 transaction과 token ID를 반환하고 `CardMinted` 이벤트가 1건인지 확인
+
+Automatic Amoy E2E evidence:
+
+- Card: `3897`, asset job: `4472`
+- Token ID: `152313847548938606853003686312354537636`
+- Transaction: `0xe8649751bfd67afb57a66e62850cefb6be80e584eb45ff1ba23ec146093c2734`
+- Receipt status `1`, `CardMinted` event `1`, public metadata/image HTTP `200`
+- On-chain `uri(tokenId)` matched the CloudFront metadata URL
+- Deployed card screen showed the Amoy explorer link and token ID with no failed requests
 
 ## 5. Ethereum Sepolia
 
@@ -87,7 +96,7 @@ CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false
 - [x] `config/networks.json`에 Sepolia contract address와 deployment block (`11444619`) 기록
 - [x] 직접 mint와 동일 idempotency retry 확인 (`0x32ddbedcb01055a46808bdfff10b24d656828d298b6589247c9f82935e67a310`, event 1건)
 - [x] `coin_csms` candidate runtime만 Sepolia로 전환하여 관리자 E2E 확인 (test card `3902`)
-- [ ] 카드 응답의 `nftChain=ETHEREUM_SEPOLIA`와 Sepolia Etherscan 링크 확인 (`nft_chain` DB 저장은 통과, CSMS 민팅 응답 매핑 수정은 로컬 검증 후 미배포)
+- [x] 카드 응답의 `nftChain=ETHEREUM_SEPOLIA`와 Sepolia Etherscan 링크 확인
 - [x] 검증 후 임시 candidate를 제거하고 운영 runtime은 Polygon Amoy로 유지
 
 Sepolia E2E evidence:
@@ -98,7 +107,7 @@ Sepolia E2E evidence:
 - Receipt status `1`, `CardMinted` event `1`, recipient balance `1`
 - Public metadata and image HTTP `200`; on-chain `uri(tokenId)` matched
 - Repeated admin mint returned the same transaction with `alreadyIssued=true`
-- Asset job `4471` remains `UPLOADED` because the direct admin mint path does not close the upload job; reconcile it before enabling automatic workers (issued cards are excluded from worker claims).
+- Asset job `4471` was reconciled to `MINTED`; its S3 original is tagged `archive=true` and `asset_status=minted`.
 
 ## 6. Mainnet Gate
 
@@ -113,4 +122,4 @@ Sepolia E2E evidence:
 
 - Sepolia minter balance와 계약 배포 차단은 해소됨 (`0.05 ETH`, deployment block `11444619`)
 - EC2 role에 `s3:DeleteObject`를 추가하고 카드 `3896`의 미참조 원본 1개를 삭제 완료
-- 자동 NFT worker는 Sepolia 응답 매핑 수정 배포와 자동 전이 검증 전까지 비활성 유지
+- 테스트넷 acceptance가 모두 통과했으며 다음 단계는 별도 mainnet wallet과 contract를 준비하는 mainnet gate다.
