@@ -18,7 +18,8 @@
     "chain": "ETHEREUM_SEPOLIA",
     "chainId": 11155111,
     "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
-    "contractAddress": "",
+    "contractAddress": "0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022",
+    "deploymentBlock": 11444619,
     "blockExplorerUrl": "https://sepolia.etherscan.io"
   },
   "ethereum-mainnet": {

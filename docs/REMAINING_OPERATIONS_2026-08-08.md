@@ -11,7 +11,8 @@
 - 카드 `6951` transaction: `0x1a266ab57da005ec598f690688334e7bcff1016cebd753b4ce83452aade5cd80`
 - 자동 민팅 워커와 S3 import worker는 운영에서 비활성 상태
 - Ethereum Sepolia minter 공개 주소: `0x5A93682B7028f50F302db70c37a99eC6B3bd20e2`
-- Sepolia 잔액: `0 ETH`
+- Sepolia ERC-1155: `0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022` (deployment block `11444619`)
+- Sepolia 잔액: `0.04808858635804417 ETH` (E2E 후)
 
 ## 1. 현재 로컬 변경 배포
 
@@ -34,13 +35,15 @@
 
 현재 원본 객체는 EC2 IAM으로 읽을 수 있지만 공개 S3 HTTPS 요청은 `403`이다. S3 public access를 해제하지 말고 CloudFront Origin Access Control을 사용한다.
 
-- [ ] AWS 관리자 권한 계정으로 기존 NFT 원본 bucket을 CloudFront origin으로 선택
-- [ ] 새 Origin Access Control 생성 후 해당 origin에 연결
-- [ ] bucket policy에는 CloudFront distribution ARN의 `s3:GetObject`만 허용
-- [ ] 허용 prefix는 최소 `metadata/cards/*`와 실제 NFT 원본 prefix로 제한
-- [ ] viewer protocol policy는 HTTPS only, 허용 method는 GET/HEAD로 제한
-- [ ] 메타데이터 JSON과 원본 이미지 URL이 인증 없이 HTTP `200`인지 확인
-- [ ] 공개 URL에서 bucket 이름이나 AWS 자격증명 query string을 사용하지 않음
+- [x] AWS 관리자 권한 계정으로 기존 NFT 원본 bucket을 CloudFront origin으로 선택
+- [x] 새 Origin Access Control 생성 후 해당 origin에 연결
+- [x] bucket policy에 CloudFront distribution의 `s3:GetObject` 허용
+- [x] NFT 메타데이터와 원본 prefix를 CloudFront로 제공
+- [x] viewer method GET/HEAD 및 HTTPS 배포 확인
+- [x] 메타데이터 JSON과 원본 이미지 URL이 인증 없이 HTTP `200`인지 확인
+- [x] 공개 URL에 bucket 이름이나 AWS 자격증명 query string을 사용하지 않음
+
+CloudFront domain: `https://dkdkgo83wk16z.cloudfront.net`
 
 Runtime env 형식:
 
@@ -57,15 +60,15 @@ CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false
 
 카드 `6951`은 메타데이터 URI 없이 발급된 smoke NFT다. 배포된 계약에는 이미 발급된 Token URI 수정 함수가 없으므로 `6951`을 운영 메타데이터 검증 카드로 재사용하지 않는다.
 
-- [ ] 미발급 테스트 카드 1장을 선택하고 원본을 할당
-- [ ] 사용자 출금 요청 후 관리자 승인
-- [ ] 워커는 계속 비활성 상태에서 관리자 처리로 메타데이터 JSON 생성 경로 검증
-- [ ] 메타데이터 URL의 JSON `name`, `image`, `properties.originalSha256` 확인
-- [ ] `image`가 `https://`이고 HTTP `200`인지 확인
-- [ ] 새 idempotency key로 Amoy 민팅
-- [ ] 계약 `uri(tokenId)`가 메타데이터 URL을 반환하는지 확인
-- [ ] 카드 응답의 `nftChain=POLYGON_AMOY`와 Polygon Amoy explorer 링크 확인
-- [ ] 중복 요청에서 추가 `CardMinted` 이벤트가 없는지 확인
+- [x] 미발급 테스트 카드 `3896`을 선택하고 원본을 할당
+- [x] 테스트 계정의 출금 요청 및 관리자 승인
+- [x] 워커 비활성 상태에서 관리자 처리로 메타데이터 생성 검증
+- [x] 메타데이터 JSON `name`, `image`, `properties.originalSha256` 확인
+- [x] `image`가 `https://`이고 HTTP `200`인지 확인
+- [x] 새 idempotency key로 Amoy 민팅 (`0x37c5498b43be530da0f58b0c939f661e1fc66e08774e668d2adbe0102ea23b9d`)
+- [x] 계약 `uri(tokenId)`가 메타데이터 URL을 반환하는지 확인
+- [x] 카드 응답의 `nftChain=POLYGON_AMOY`와 Polygon Amoy explorer 링크 확인
+- [x] 중복 요청의 `CardMinted` 이벤트가 1건으로 유지되는지 확인
 
 ## 4. 자동 워커 활성화
 
@@ -78,14 +81,24 @@ CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false
 
 ## 5. Ethereum Sepolia
 
-- [ ] faucet에서 `0x5A93682B7028f50F302db70c37a99eC6B3bd20e2`에 Sepolia ETH 충전
-- [ ] 잔액 확인 후 `NETWORK_ENV=ethereum-sepolia`로 network check
-- [ ] 동일 ERC-1155 코드를 Sepolia에 배포
-- [ ] `config/networks.json`에 Sepolia contract address와 deployment block 기록
-- [ ] 직접 mint와 동일 idempotency retry 확인
-- [ ] `coin_csms` candidate runtime만 Sepolia로 전환하여 관리자 E2E 확인
-- [ ] 카드 응답의 `nftChain=ETHEREUM_SEPOLIA`와 Sepolia Etherscan 링크 확인
-- [ ] 검증 후 운영 runtime은 Polygon Amoy로 복구
+- [x] faucet에서 `0x5A93682B7028f50F302db70c37a99eC6B3bd20e2`에 Sepolia ETH 충전 (`0.05 ETH`)
+- [x] 잔액 확인 후 `NETWORK_ENV=ethereum-sepolia`로 network check
+- [x] 동일 ERC-1155 코드를 Sepolia에 배포 (`0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022`)
+- [x] `config/networks.json`에 Sepolia contract address와 deployment block (`11444619`) 기록
+- [x] 직접 mint와 동일 idempotency retry 확인 (`0x32ddbedcb01055a46808bdfff10b24d656828d298b6589247c9f82935e67a310`, event 1건)
+- [x] `coin_csms` candidate runtime만 Sepolia로 전환하여 관리자 E2E 확인 (test card `3902`)
+- [ ] 카드 응답의 `nftChain=ETHEREUM_SEPOLIA`와 Sepolia Etherscan 링크 확인 (`nft_chain` DB 저장은 통과, CSMS 민팅 응답 매핑 수정은 로컬 검증 후 미배포)
+- [x] 검증 후 임시 candidate를 제거하고 운영 runtime은 Polygon Amoy로 유지
+
+Sepolia E2E evidence:
+
+- Card: `3902`, asset job: `4471`
+- Token ID: `152313847548938606871810718356253728933`
+- Transaction: `0xf57de983b43dd4499508f1a124a7f893bb07c746ffc141e77b41c14a3afbd5d7`
+- Receipt status `1`, `CardMinted` event `1`, recipient balance `1`
+- Public metadata and image HTTP `200`; on-chain `uri(tokenId)` matched
+- Repeated admin mint returned the same transaction with `alreadyIssued=true`
+- Asset job `4471` remains `UPLOADED` because the direct admin mint path does not close the upload job; reconcile it before enabling automatic workers (issued cards are excluded from worker claims).
 
 ## 6. Mainnet Gate
 
@@ -98,7 +111,6 @@ CARD_GATCHA_NFT_S3_IMPORT_WORKER_ENABLED=false
 
 ## 확인된 외부 차단 사항
 
-- Sepolia minter balance가 `0 ETH`라 현재 계약 배포 불가
-- EC2 role에는 CloudFront 조회/생성 및 S3 bucket-policy 조회 권한이 없음
-- 실제 AWS 공개 origin 구성은 AWS 관리자 권한이 있는 사용자 작업이 필요
-- 공개 메타데이터 URL이 준비되기 전까지 자동 NFT worker는 의도적으로 비활성 유지
+- Sepolia minter balance와 계약 배포 차단은 해소됨 (`0.05 ETH`, deployment block `11444619`)
+- EC2 role에 `s3:DeleteObject`를 추가하고 카드 `3896`의 미참조 원본 1개를 삭제 완료
+- 자동 NFT worker는 Sepolia 응답 매핑 수정 배포와 자동 전이 검증 전까지 비활성 유지

@@ -36,8 +36,8 @@
 
 ## Remaining: Testnet Acceptance And Mainnet Gate
 
-- [ ] Publish immutable card metadata and set `CARD_GATCHA_NFT_METADATA_BASE_URL`; do not use the smoke-mint placeholder URI for a real card.
-- [ ] Set `CARD_GATCHA_NFT_ASSET_BASE_URL` to the public HTTPS origin used by metadata JSON; never write `s3://` as the NFT image URI.
+- [x] Publish immutable card metadata and set `CARD_GATCHA_NFT_METADATA_BASE_URL` through CloudFront.
+- [x] Set `CARD_GATCHA_NFT_ASSET_BASE_URL` to the public CloudFront HTTPS origin; no `s3://` NFT image URI is used.
 - [x] Record E2E evidence: card `6951`, token ID `152313847548938606834917230208834693034`, transaction `0x1a266ab57da005ec598f690688334e7bcff1016cebd753b4ce83452aade5cd80`, and idempotent retry result.
 - [x] Keep automated NFT workers disabled until the public metadata gate and follow-up deploy pass.
 - [ ] Create a separate mainnet wallet and secrets only after Amoy acceptance; never reuse the Amoy private key.
@@ -46,8 +46,8 @@
 ## Ethereum
 
 - [x] Add config-map profiles for `ethereum-sepolia` and `ethereum-mainnet`.
-- [x] Check the dedicated testnet minter balance without printing its private key; confirmed `0 ETH`.
-- [ ] Fund the dedicated testnet minter with Sepolia ETH.
-- [ ] Deploy the ERC-1155 contract to Sepolia and record its deployment block.
-- [ ] Run direct and `coin_csms` Sepolia mint/idempotency E2E.
+- [x] Check the dedicated testnet minter balance without printing its private key; confirmed `0.05 ETH` after funding.
+- [x] Fund the dedicated testnet minter with Sepolia ETH.
+- [x] Deploy the ERC-1155 contract to Sepolia and record deployment block `11444619`.
+- [x] Run direct and `coin_csms` Sepolia mint/idempotency E2E (card `3902`, tx `0xf57de983b43dd4499508f1a124a7f893bb07c746ffc141e77b41c14a3afbd5d7`, one event).
 - [ ] Keep Ethereum mainnet blocked until Sepolia and metadata acceptance pass.

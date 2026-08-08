@@ -59,6 +59,7 @@ describe("loadAppConfig", () => {
     expect(config.network.chain).toBe("ETHEREUM_SEPOLIA");
     expect(config.network.chainId).toBe(11155111);
     expect(config.network.rpcUrl).toBe("https://ethereum-sepolia-rpc.publicnode.com");
-    expect(config.network.contractAddress).toBe("");
+    expect(config.network.contractAddress).toBe("0xd6BC9dF3AE8B553Ff692203f4b9359C82d390022");
+    expect(config.network.deploymentBlock).toBe(11444619);
   });
 });
