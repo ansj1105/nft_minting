@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: nft-minting-production
   cancel-in-progress: false
@@ -21,73 +25,84 @@ jobs:
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: npm ci
+      - run: npm run validate:ecr-deploy
       - run: npm run build
       - run: npm test
       - run: npm audit --omit=dev
       - run: npm run lint:secrets
 
-  deploy:
+  build_push:
     needs: verify
-    runs-on: [self-hosted, linux, x64, production, deploy]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      DEPLOY_SHA: ${{ github.sha }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Deploy candidate and verify health
+      - name: Resolve delivery config
+        id: delivery
         run: |
-          bundle="$RUNNER_TEMP/nft-minting-${DEPLOY_SHA}.bundle"
-          remote_bundle="/tmp/nft-minting-${DEPLOY_SHA}.bundle"
-          git bundle create "$bundle" HEAD
-          scp -o BatchMode=yes -o ConnectTimeout=15 "$bundle" ubuntu@52.200.97.155:"$remote_bundle"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync('deploy/ecr-images.json', 'utf8'));
+          const image = manifest.images.find((entry) => entry.key === 'nft-minting');
+          if (!image) throw new Error('nft-minting image definition is missing');
+          const values = {
+            region: manifest.awsRegion,
+            role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
+            registry: `${manifest.accountId}.dkr.ecr.${manifest.awsRegion}.amazonaws.com`,
+            repository: image.repository,
+            context: image.context,
+            dockerfile: image.dockerfile,
+            platform: image.platform,
+          };
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
+          NODE
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ steps.delivery.outputs.role_arn }}
+          aws-region: ${{ steps.delivery.outputs.region }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push immutable candidate
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.delivery.outputs.context }}
+          file: ${{ steps.delivery.outputs.dockerfile }}
+          platforms: ${{ steps.delivery.outputs.platform }}
+          provenance: false
+          push: true
+          tags: ${{ steps.delivery.outputs.registry }}/${{ steps.delivery.outputs.repository }}:candidate-${{ github.sha }}
 
-          ssh -o BatchMode=yes -o ConnectTimeout=15 ubuntu@52.200.97.155 "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
-          set -euo pipefail
-
-          app_dir=/var/www/nft_minting/app
-          image="korion/nft-minting:${DEPLOY_SHA}"
-          candidate=nft-minting-candidate
-          previous=nft-minting-previous
-          remote_bundle="/tmp/nft-minting-${DEPLOY_SHA}.bundle"
-
-          cd "$app_dir"
-          test -z "$(sudo git -C "$app_dir" status --short)"
-          sudo git -C "$app_dir" fetch --quiet "$remote_bundle" HEAD
-          sudo git -C "$app_dir" checkout --detach --quiet "$DEPLOY_SHA"
-          test "$(sudo git -C "$app_dir" rev-parse HEAD)" = "$DEPLOY_SHA"
-          rm -f "$remote_bundle"
-
-          sudo docker build --pull -t "$image" .
-          sudo docker rm -f "$candidate" >/dev/null 2>&1 || true
-          sudo docker run -d --name "$candidate" --restart unless-stopped \
-            --network coin-shared \
-            --env-file /etc/korion/nft-minting/amoy.env \
-            "$image" >/dev/null
-
-          for attempt in $(seq 1 20); do
-            if sudo docker exec "$candidate" wget -qO- http://127.0.0.1:8088/health >/dev/null; then
-              break
-            fi
-            if [ "$attempt" = 20 ]; then
-              sudo docker logs "$candidate" >&2 || true
-              exit 1
-            fi
-            sleep 2
-          done
-
-          sudo docker rm -f "$previous" >/dev/null 2>&1 || true
-          if sudo docker inspect nft-minting >/dev/null 2>&1; then
-            sudo docker rename nft-minting "$previous"
-          fi
-          sudo docker rename "$candidate" nft-minting
-          if ! sudo docker exec nft-minting wget -qO- http://127.0.0.1:8088/health; then
-            sudo docker rm -f nft-minting >/dev/null 2>&1 || true
-            if sudo docker inspect "$previous" >/dev/null 2>&1; then
-              sudo docker rename "$previous" nft-minting
-            fi
-            exit 1
-          fi
-          sudo docker rm -f "$previous" >/dev/null 2>&1 || true
-          REMOTE
+  deploy:
+    needs: build_push
+    runs-on: [self-hosted, linux, x64, production, deploy]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve delivery config
+        id: delivery
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync('deploy/ecr-images.json', 'utf8'));
+          const image = manifest.images.find((entry) => entry.key === 'nft-minting');
+          if (!image) throw new Error('nft-minting image definition is missing');
+          const values = {
+            region: manifest.awsRegion,
+            role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
+            registry: `${manifest.accountId}.dkr.ecr.${manifest.awsRegion}.amazonaws.com`,
+            repository: image.repository,
+          };
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
+          NODE
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ steps.delivery.outputs.role_arn }}
+          aws-region: ${{ steps.delivery.outputs.region }}
+      - name: Deploy exact digest and promote pointers
+        env:
+          IMAGE_URI: ${{ steps.delivery.outputs.registry }}/${{ steps.delivery.outputs.repository }}@${{ needs.build_push.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+          ECR_CONFIG: deploy/ecr-images.json
+        run: bash scripts/deploy-ecr-image.sh

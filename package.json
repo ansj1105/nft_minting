@@ -11,6 +11,7 @@
     "compile:contracts": "XDG_CONFIG_HOME=.cache/config XDG_DATA_HOME=.cache/data XDG_CACHE_HOME=.cache/cache hardhat compile",
     "deploy": "npm run compile:contracts && tsx scripts/deploy.ts",
     "check:network": "tsx scripts/check-network.ts",
+    "validate:ecr-deploy": "tsx scripts/validate-ecr-deployment.ts",
     "lint:secrets": "rg -n \"PRIVATE_KEY|SECRET|TOKEN|API_KEY|MNEMONIC|PASSWORD|JWT|seed phrase|BEGIN .* PRIVATE KEY\" . --glob '!node_modules/**' --glob '!dist/**' --glob '!artifacts/**' --glob '!cache/**'"
   },
   "dependencies": {
