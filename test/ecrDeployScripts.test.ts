@@ -30,6 +30,7 @@ describe("ECR deployment scripts", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("ecr login");
+    expect(result.stdout).toContain("clear temporary ECR login");
     expect(result.stdout).toContain("running image matches recorded current digest");
     expect(result.stdout).toContain("docker pull");
     expect(result.stdout).toContain("nft-minting-candidate");

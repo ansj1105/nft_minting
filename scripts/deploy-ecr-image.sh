@@ -50,6 +50,7 @@ expected_prefix="${registry}/${repository}@sha256:"
 
 if [[ ${DRY_RUN:-0} == 1 ]]; then
   echo "[dry-run] ecr login on ${endpoint}"
+  echo "[dry-run] clear temporary ECR login after pull"
   echo "[dry-run] verify running image matches recorded current digest"
   echo "[dry-run] docker pull ${image_uri}"
   echo "[dry-run] run ${candidate} on ${network} with env file path only"
@@ -90,8 +91,14 @@ trap cleanup_candidate EXIT
 ssh "${ssh_opts[@]}" "$endpoint" bash -s -- "$image_uri" "$region" "$registry" "$candidate" "$network" "$env_file" "$health_url" <<'REMOTE'
 set -euo pipefail
 image_uri=$1 region=$2 registry=$3 candidate=$4 network=$5 env_file=$6 health_url=$7
+logout_registry() {
+  sudo docker logout "$registry" >/dev/null 2>&1 || true
+}
+trap logout_registry EXIT
 aws ecr get-login-password --region "$region" | sudo docker login --username AWS --password-stdin "$registry" >/dev/null
 sudo docker pull "$image_uri" >/dev/null
+logout_registry
+trap - EXIT
 sudo docker rm -f "$candidate" >/dev/null 2>&1 || true
 sudo docker run -d --name "$candidate" --restart unless-stopped --network "$network" --env-file "$env_file" "$image_uri" >/dev/null
 for attempt in $(seq 1 20); do
