@@ -14,14 +14,19 @@ if [[ ! "$source_sha" =~ ^[0-9a-f]{6,40}$ ]]; then
   exit 2
 fi
 
-mapfile -t config_values < <(node - "$config" <<'NODE'
-const fs = require("node:fs");
-const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const image = manifest.images.find((entry) => entry.key === "nft-minting");
-if (!image) throw new Error("nft-minting image definition is missing");
-const d = image.deployment;
-for (const value of [manifest.awsRegion, manifest.accountId, image.repository, d.endpoint, d.container, d.candidateContainer, d.network, d.envFile, d.stateFile, d.healthUrl]) console.log(value);
-NODE
+mapfile -t config_values < <(python3 - "$config" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+image = next((entry for entry in manifest["images"] if entry["key"] == "nft-minting"), None)
+if image is None:
+    raise RuntimeError("nft-minting image definition is missing")
+deployment = image["deployment"]
+for value in (manifest["awsRegion"], manifest["accountId"], image["repository"], deployment["endpoint"], deployment["container"], deployment["candidateContainer"], deployment["network"], deployment["envFile"], deployment["stateFile"], deployment["healthUrl"]):
+    print(value)
+PY
 )
 
 if [[ ${#config_values[@]} -ne 10 ]]; then

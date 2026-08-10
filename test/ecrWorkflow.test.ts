@@ -12,6 +12,7 @@ describe("ECR delivery workflow", () => {
     expect(workflow).toContain("docker/build-push-action@");
     expect(workflow).toContain("candidate-${{ github.sha }}");
     expect(workflow).toContain("deploy/ecr-images.json");
+    expect(workflow).toContain("needs.build_push.outputs.registry");
     expect(workflow).not.toContain("ECR_REPOSITORY:");
     expect(workflow).not.toContain("AWS_ROLE_ARN:");
   });

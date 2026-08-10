@@ -11,12 +11,16 @@ if [[ ${DRY_RUN:-0} == 1 ]]; then
   exit 0
 fi
 
-mapfile -t target_values < <(node - "$config" <<'NODE'
-const fs = require("node:fs");
-const image = JSON.parse(fs.readFileSync(process.argv[2], "utf8")).images.find((entry) => entry.key === "nft-minting");
-console.log(image.deployment.endpoint);
-console.log(image.deployment.stateFile);
-NODE
+mapfile -t target_values < <(python3 - "$config" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+image = next(entry for entry in manifest["images"] if entry["key"] == "nft-minting")
+print(image["deployment"]["endpoint"])
+print(image["deployment"]["stateFile"])
+PY
 )
 endpoint=${target_values[0]}
 state_file=${target_values[1]}

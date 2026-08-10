@@ -37,6 +37,10 @@ jobs:
     timeout-minutes: 15
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      region: ${{ steps.delivery.outputs.region }}
+      role_arn: ${{ steps.delivery.outputs.role_arn }}
+      registry: ${{ steps.delivery.outputs.registry }}
+      repository: ${{ steps.delivery.outputs.repository }}
     steps:
       - uses: actions/checkout@v4
       - name: Resolve delivery config
@@ -80,29 +84,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve delivery config
-        id: delivery
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const manifest = JSON.parse(fs.readFileSync('deploy/ecr-images.json', 'utf8'));
-          const image = manifest.images.find((entry) => entry.key === 'nft-minting');
-          if (!image) throw new Error('nft-minting image definition is missing');
-          const values = {
-            region: manifest.awsRegion,
-            role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
-            registry: `${manifest.accountId}.dkr.ecr.${manifest.awsRegion}.amazonaws.com`,
-            repository: image.repository,
-          };
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
-          NODE
+      - name: Verify deploy runner tools
+        run: command -v python3 aws ssh >/dev/null
       - uses: aws-actions/configure-aws-credentials@v6.2.3
         with:
-          role-to-assume: ${{ steps.delivery.outputs.role_arn }}
-          aws-region: ${{ steps.delivery.outputs.region }}
+          role-to-assume: ${{ needs.build_push.outputs.role_arn }}
+          aws-region: ${{ needs.build_push.outputs.region }}
       - name: Deploy exact digest and promote pointers
         env:
-          IMAGE_URI: ${{ steps.delivery.outputs.registry }}/${{ steps.delivery.outputs.repository }}@${{ needs.build_push.outputs.digest }}
+          IMAGE_URI: ${{ needs.build_push.outputs.registry }}/${{ needs.build_push.outputs.repository }}@${{ needs.build_push.outputs.digest }}
           SOURCE_SHA: ${{ github.sha }}
           ECR_CONFIG: deploy/ecr-images.json
         run: bash scripts/deploy-ecr-image.sh
