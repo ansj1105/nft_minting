@@ -81,6 +81,32 @@ describe("POST /mint", () => {
     expect(BigInt(response.body.estimatedMintFeeWei)).toBeGreaterThan(0n);
   });
 
+  it("does not burst readiness RPC calls before the previous request completes", async () => {
+    let balanceResolved = false;
+    const provider = {
+      getBalance: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        balanceResolved = true;
+        return 1_000_000_000_000_000_000n;
+      },
+      getFeeData: async () => {
+        if (!balanceResolved) throw new Error("RPC burst rejected");
+        return { gasPrice: 1n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n };
+      },
+    };
+    const minter = new NftMinter({
+      network: ctx.config.network,
+      privateKey: ctx.config.privateKey,
+      provider: provider as never,
+      signer: ctx.deployer as never,
+    });
+
+    await expect(minter.readiness()).resolves.toMatchObject({
+      gasReady: true,
+      nativeBalanceWei: "1000000000000000000",
+    });
+  });
+
   it("verifies a confirmed user gas deposit to the custody wallet", async () => {
     const requiredAmount = 1_000_000_000_000_000n;
     const tx = await ctx.recipient.sendTransaction({

@@ -103,7 +103,11 @@ export class NftMinter {
 
   constructor(options: MinterOptions) {
     this.network = options.network;
-    const fallbackProvider = options.provider || new ethers.JsonRpcProvider(options.network.rpcUrl, options.network.chainId);
+    const fallbackProvider = options.provider || new ethers.JsonRpcProvider(
+      options.network.rpcUrl,
+      options.network.chainId,
+      { staticNetwork: true },
+    );
     this.signer = options.signer || new ethers.Wallet(normalizePrivateKey(options.privateKey), fallbackProvider);
     this.provider = options.provider || (this.signer as ethers.Signer).provider || fallbackProvider;
   }
@@ -128,18 +132,16 @@ export class NftMinter {
     }
     const custodyAddress = await this.custodyAddress();
     const contract = new ethers.Contract(this.network.contractAddress, contractAbi, this.signer);
-    const [nativeBalance, feeData, gasUnits, claimVersion] = await Promise.all([
-      this.provider.getBalance(custodyAddress),
-      this.provider.getFeeData(),
-      contract.mintCard.estimateGas(
-        custodyAddress,
-        0n,
-        1n,
-        "",
-        ethers.id("korion-nft-readiness-check"),
-      ) as Promise<bigint>,
-      contract.claimVersion().catch(() => 0n) as Promise<bigint>,
-    ]);
+    const nativeBalance = await this.provider.getBalance(custodyAddress);
+    const feeData = await this.provider.getFeeData();
+    const gasUnits = await contract.mintCard.estimateGas(
+      custodyAddress,
+      0n,
+      1n,
+      "",
+      ethers.id("korion-nft-readiness-check"),
+    ) as bigint;
+    const claimVersion = await contract.claimVersion().catch(() => 0n) as bigint;
     const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
     const estimatedMintFee = gasUnits * gasPrice * 120n / 100n;
     return {
