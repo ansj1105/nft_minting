@@ -86,6 +86,26 @@ The minter service should stay internal or loopback-bound. Browser frontend code
 
 ## API
 
+User-paid withdrawal gas is verified on-chain before Foxya accepts the withdrawal:
+
+```http
+POST /gas-deposits/verify
+X-API-Key: <MINTER_API_KEY>
+Content-Type: application/json
+```
+
+```json
+{
+  "txHash": "0x...",
+  "minimumAmountWei": "1200000000000000",
+  "minConfirmations": 3
+}
+```
+
+The response identifies the transaction sender, amount, custody deposit address,
+block, and confirmation count. Foxya stores the proof and uses the verified sender
+as the NFT recipient. A transaction hash may be consumed by only one withdrawal.
+
 ```http
 POST /mint
 X-API-Key: <MINTER_API_KEY>

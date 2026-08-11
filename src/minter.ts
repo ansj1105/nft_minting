@@ -3,6 +3,7 @@ import { NetworkConfig } from "./config.js";
 import { MintRequest, tokenIdFor } from "./mint-request.js";
 import { normalizePrivateKey } from "./private-key.js";
 import { TransferRequest } from "./transfer-request.js";
+import { GasDepositVerificationRequest } from "./gas-deposit-request.js";
 
 const contractAbi = [
   "function mintCard(address recipient,uint256 tokenId,uint256 amount,string tokenUri,bytes32 requestHash) external",
@@ -34,6 +35,20 @@ export interface MinterOptions {
   privateKey: string;
   provider?: ethers.Provider;
   signer?: ethers.ContractRunner;
+}
+
+export interface GasDepositVerificationResult {
+  verified: boolean;
+  reason?: "TX_NOT_FOUND" | "TX_PENDING" | "TX_FAILED" | "RECIPIENT_MISMATCH" | "AMOUNT_INSUFFICIENT" | "CONFIRMATIONS_PENDING";
+  txHash: string;
+  fromAddress?: string;
+  depositAddress: string;
+  amountWei?: string;
+  confirmations: number;
+  blockNumber?: number;
+  blockTimestamp?: number;
+  chain: string;
+  chainId: number;
 }
 
 export class NftMinter {
@@ -86,6 +101,46 @@ export class NftMinter {
       nativeBalanceWei: nativeBalance.toString(),
       estimatedMintFeeWei: estimatedMintFee.toString(),
     };
+  }
+
+  async verifyGasDeposit(request: GasDepositVerificationRequest): Promise<GasDepositVerificationResult> {
+    const depositAddress = await this.custodyAddress();
+    const base = {
+      txHash: request.txHash,
+      depositAddress,
+      confirmations: 0,
+      chain: this.network.chain,
+      chainId: this.network.chainId,
+    };
+    const tx = await this.provider.getTransaction(request.txHash);
+    if (!tx) return { ...base, verified: false, reason: "TX_NOT_FOUND" };
+
+    const receipt = await this.provider.getTransactionReceipt(request.txHash);
+    if (!receipt || tx.blockNumber == null) {
+      return { ...base, verified: false, reason: "TX_PENDING", fromAddress: tx.from, amountWei: tx.value.toString() };
+    }
+    const currentBlock = await this.provider.getBlockNumber();
+    const confirmations = Math.max(0, currentBlock - tx.blockNumber + 1);
+    const block = await this.provider.getBlock(tx.blockNumber);
+    const details = {
+      ...base,
+      fromAddress: tx.from,
+      amountWei: tx.value.toString(),
+      confirmations,
+      blockNumber: tx.blockNumber,
+      blockTimestamp: block?.timestamp,
+    };
+    if (receipt.status !== 1) return { ...details, verified: false, reason: "TX_FAILED" };
+    if (!tx.to || tx.to.toLowerCase() !== depositAddress.toLowerCase()) {
+      return { ...details, verified: false, reason: "RECIPIENT_MISMATCH" };
+    }
+    if (tx.value < BigInt(request.minimumAmountWei)) {
+      return { ...details, verified: false, reason: "AMOUNT_INSUFFICIENT" };
+    }
+    if (confirmations < request.minConfirmations) {
+      return { ...details, verified: false, reason: "CONFIRMATIONS_PENDING" };
+    }
+    return { ...details, verified: true };
   }
 
   async mint(request: MintRequest): Promise<MintResult> {

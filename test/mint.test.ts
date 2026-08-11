@@ -80,6 +80,72 @@ describe("POST /mint", () => {
     expect(BigInt(response.body.estimatedMintFeeWei)).toBeGreaterThan(0n);
   });
 
+  it("verifies a confirmed user gas deposit to the custody wallet", async () => {
+    const requiredAmount = 1_000_000_000_000_000n;
+    const tx = await ctx.recipient.sendTransaction({
+      to: ctx.deployer.address,
+      value: requiredAmount,
+    });
+    await tx.wait();
+
+    const response = await request(ctx.app)
+      .post("/gas-deposits/verify")
+      .set("X-API-Key", "test-api-key")
+      .send({
+        txHash: tx.hash,
+        minimumAmountWei: requiredAmount.toString(),
+        minConfirmations: 1,
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      verified: true,
+      txHash: tx.hash,
+      fromAddress: ctx.recipient.address,
+      depositAddress: ctx.deployer.address,
+      amountWei: requiredAmount.toString(),
+      confirmations: 1,
+      chain: "POLYGON_AMOY",
+      chainId: 31337,
+    });
+  });
+
+  it("rejects a gas deposit below the quoted amount", async () => {
+    const tx = await ctx.recipient.sendTransaction({
+      to: ctx.deployer.address,
+      value: 1n,
+    });
+    await tx.wait();
+
+    const response = await request(ctx.app)
+      .post("/gas-deposits/verify")
+      .set("X-API-Key", "test-api-key")
+      .send({
+        txHash: tx.hash,
+        minimumAmountWei: "1000",
+        minConfirmations: 1,
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      verified: false,
+      reason: "AMOUNT_INSUFFICIENT",
+      fromAddress: ctx.recipient.address,
+      amountWei: "1",
+    });
+  });
+
+  it("requires the internal API key for gas deposit verification", async () => {
+    await request(ctx.app)
+      .post("/gas-deposits/verify")
+      .send({
+        txHash: `0x${"a".repeat(64)}`,
+        minimumAmountWei: "1",
+        minConfirmations: 1,
+      })
+      .expect(401);
+  });
+
   it("mints one ERC-1155 card on the configured Polygon testnet profile", async () => {
     const response = await request(ctx.app)
       .post("/mint")

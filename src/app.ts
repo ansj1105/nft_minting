@@ -4,6 +4,7 @@ import { logger } from "./logger.js";
 import { mintRequestSchema } from "./mint-request.js";
 import { ApiError, MintResult, NftMinter } from "./minter.js";
 import { transferRequestSchema } from "./transfer-request.js";
+import { gasDepositVerificationSchema } from "./gas-deposit-request.js";
 
 interface AppOptions {
   config: AppConfig;
@@ -82,6 +83,15 @@ export function createApp(options: AppOptions) {
       }
 
       res.json(await task);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/gas-deposits/verify", requireApiKey(options.config.apiKey), async (req, res, next) => {
+    try {
+      const body = gasDepositVerificationSchema.parse(req.body);
+      res.json(await minter.verifyGasDeposit(body));
     } catch (error) {
       next(error);
     }
