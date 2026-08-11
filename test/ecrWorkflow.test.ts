@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
+const deployTrust = JSON.parse(
+  readFileSync("deploy/iam/nft-minting-github-oidc-trust.json", "utf8"),
+);
 
 describe("ECR delivery workflow", () => {
   it("builds and pushes on GitHub-hosted infrastructure through OIDC", () => {
@@ -27,5 +30,15 @@ describe("ECR delivery workflow", () => {
     expect(workflow).not.toMatch(/^         run:/m);
     expect(workflow).not.toContain("git bundle create");
     expect(workflow).not.toContain("sudo docker build");
+  });
+
+  it("binds the deploy role to the repository ID based GitHub subject", () => {
+    expect(
+      deployTrust.Statement[0].Condition.StringEquals[
+        "token.actions.githubusercontent.com:sub"
+      ],
+    ).toBe(
+      "repo:ansj1105@85127906/nft_minting@1323170566:ref:refs/heads/main",
+    );
   });
 });
