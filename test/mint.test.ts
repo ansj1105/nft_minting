@@ -72,8 +72,12 @@ describe("POST /mint", () => {
       chainId: 31337,
       contractAddress: await ctx.contract.getAddress(),
       custodyAddress: ctx.deployer.address,
-      contractConfigured: true
+      contractConfigured: true,
+      gasReady: true,
+      nativeCurrency: "POL"
     });
+    expect(BigInt(response.body.nativeBalanceWei)).toBeGreaterThan(0n);
+    expect(BigInt(response.body.estimatedMintFeeWei)).toBeGreaterThan(0n);
   });
 
   it("mints one ERC-1155 card on the configured Polygon testnet profile", async () => {

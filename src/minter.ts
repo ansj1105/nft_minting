@@ -22,6 +22,13 @@ export interface MintResult {
   chainId: number;
 }
 
+export interface MinterReadiness {
+  gasReady: boolean;
+  nativeCurrency: "POL" | "ETH";
+  nativeBalanceWei: string;
+  estimatedMintFeeWei: string;
+}
+
 export interface MinterOptions {
   network: NetworkConfig;
   privateKey: string;
@@ -47,6 +54,38 @@ export class NftMinter {
 
   async custodyAddress(): Promise<string> {
     return (this.signer as ethers.Signer).getAddress();
+  }
+
+  async readiness(): Promise<MinterReadiness> {
+    if (!this.isConfigured()) {
+      return {
+        gasReady: false,
+        nativeCurrency: this.nativeCurrency(),
+        nativeBalanceWei: "0",
+        estimatedMintFeeWei: "0",
+      };
+    }
+    const custodyAddress = await this.custodyAddress();
+    const contract = new ethers.Contract(this.network.contractAddress, contractAbi, this.signer);
+    const [nativeBalance, feeData, gasUnits] = await Promise.all([
+      this.provider.getBalance(custodyAddress),
+      this.provider.getFeeData(),
+      contract.mintCard.estimateGas(
+        custodyAddress,
+        0n,
+        1n,
+        "",
+        ethers.id("korion-nft-readiness-check"),
+      ) as Promise<bigint>,
+    ]);
+    const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+    const estimatedMintFee = gasUnits * gasPrice * 120n / 100n;
+    return {
+      gasReady: gasPrice > 0n && nativeBalance >= estimatedMintFee,
+      nativeCurrency: this.nativeCurrency(),
+      nativeBalanceWei: nativeBalance.toString(),
+      estimatedMintFeeWei: estimatedMintFee.toString(),
+    };
   }
 
   async mint(request: MintRequest): Promise<MintResult> {
@@ -191,6 +230,10 @@ export class NftMinter {
       chain: this.network.chain,
       chainId: this.network.chainId
     };
+  }
+
+  private nativeCurrency(): "POL" | "ETH" {
+    return this.network.chain.startsWith("POLYGON") ? "POL" : "ETH";
   }
 }
 

@@ -35,6 +35,12 @@ export function createApp(options: AppOptions) {
 
   app.get("/health", async (_req, res, next) => {
     try {
+      const readiness = await minter.readiness().catch(() => ({
+        gasReady: false,
+        nativeCurrency: options.config.network.chain.startsWith("POLYGON") ? "POL" as const : "ETH" as const,
+        nativeBalanceWei: "0",
+        estimatedMintFeeWei: "0",
+      }));
       res.json({
         ok: true,
         networkEnv: options.config.networkEnv,
@@ -42,7 +48,8 @@ export function createApp(options: AppOptions) {
         chainId: options.config.network.chainId,
         contractAddress: options.config.network.contractAddress,
         custodyAddress: await minter.custodyAddress(),
-        contractConfigured: minter.isConfigured()
+        contractConfigured: minter.isConfigured(),
+        ...readiness
       });
     } catch (error) {
       next(error);
