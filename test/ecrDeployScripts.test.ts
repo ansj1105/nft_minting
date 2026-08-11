@@ -79,8 +79,10 @@ describe("ECR deployment scripts", () => {
     expect(wrapper).toContain("--document-version '$LATEST'");
     expect(wrapper).toContain('run_command deploy nft-minting');
     expect(wrapper).toContain('run_command deploy nft-minting-sepolia');
+    expect(wrapper).not.toContain('current_image="${registry}/${repository}@${current_digest}"');
     expect(document).toContain("DeploymentKey:");
     expect(document).toContain("/etc/korion/nft-minting/sepolia.env");
+    expect(document).toContain('[[ -z "$expected_current" || "$expected_current" == "$current" ]]');
     expect(policy).toContain("ssm:UpdateDocument");
   });
 });

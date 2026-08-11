@@ -39,9 +39,8 @@ if [[ "$action" == rollback ]]; then
   exit 0
 fi
 new_digest=${image_uri##*@}; [[ "$new_digest" != "$current_digest" ]] || { echo 'requested digest is already current'; exit 0; }
-current_image="${registry}/${repository}@${current_digest}"
-run_command deploy nft-minting "$image_uri" "$source_sha" "$current_image"
-if ! run_command deploy nft-minting-sepolia "$image_uri" "$source_sha" "$current_image"; then run_command rollback nft-minting || true; exit 1; fi
+run_command deploy nft-minting "$image_uri" "$source_sha"
+if ! run_command deploy nft-minting-sepolia "$image_uri" "$source_sha"; then run_command rollback nft-minting || true; exit 1; fi
 if ! put_pointer previous "$current_digest" || ! put_pointer current "$new_digest"; then run_command rollback nft-minting-sepolia || true; run_command rollback nft-minting || true; exit 1; fi
 aws ecr batch-delete-image --region "$region" --repository-name "$repository" --image-ids "imageTag=candidate-${source_sha}" >/dev/null 2>&1 || true
 echo "deployed ${image_uri} through SSM"

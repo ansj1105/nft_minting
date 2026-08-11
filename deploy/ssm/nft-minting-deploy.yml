@@ -69,7 +69,7 @@ mainSteps:
             activate "$previous"; write_state "$previous" "$current" "$previous_sha" "$current_sha"; exit 0
           fi
           [[ "$image_uri" =~ $image_pattern && "$source_sha" =~ ^[0-9a-f]{6,40}$ ]] || exit 2
-          [[ "$expected_current" == "$current" ]] || { echo 'ECR current differs from managed-node state' >&2; exit 1; }
+          [[ -z "$expected_current" || "$expected_current" == "$current" ]] || { echo 'expected current differs from managed-node state' >&2; exit 1; }
           [[ "$image_uri" != "$current" ]] || { echo 'requested digest is already current'; exit 0; }
           docker pull "$current" >/dev/null; docker pull "$image_uri" >/dev/null
           [[ $(docker inspect --format '{{.Image}}' "$container") == $(docker image inspect --format '{{.Id}}' "$current") ]] || exit 1
