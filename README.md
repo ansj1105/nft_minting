@@ -89,7 +89,43 @@ The minter service should stay internal or loopback-bound. Browser frontend code
 
 ## API
 
-User-paid withdrawal gas is verified on-chain before Foxya accepts the withdrawal:
+`POST /gas-deposits/verify` is the legacy server-gas deposit flow. New user-funded
+withdrawals use a signed claim so MetaMask pays the chain directly without sending
+native currency to the minter wallet.
+
+```http
+POST /claims/prepare
+X-API-Key: <MINTER_API_KEY>
+Content-Type: application/json
+```
+
+The request uses the same card, recipient, chain, contract, token URI, and
+idempotency fields as `POST /mint`. For a custody release it additionally includes
+`sourceAddress` and `tokenId`. The response contains `contractAddress`, `data`,
+`value`, `requestHash`, `tokenId`, and `expiresAt`. Submit those transaction fields
+through the user's wallet without modifying them.
+
+After submission, the server verifies the exact claim event:
+
+```http
+POST /claims/verify
+X-API-Key: <MINTER_API_KEY>
+Content-Type: application/json
+
+{
+  "txHash": "0x...",
+  "requestHash": "0x...",
+  "recipientAddress": "0x...",
+  "tokenId": "123456",
+  "minConfirmations": 3
+}
+```
+
+The signed claim fixes the recipient regardless of which MetaMask account pays
+the gas, expires after ten minutes, and consumes its request hash once on-chain.
+`GET /health` returns `claimReady=true` only for a compatible deployed contract.
+
+Legacy endpoint:
 
 ```http
 POST /gas-deposits/verify

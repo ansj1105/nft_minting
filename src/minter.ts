@@ -4,15 +4,32 @@ import { MintRequest, tokenIdFor } from "./mint-request.js";
 import { normalizePrivateKey } from "./private-key.js";
 import { TransferRequest } from "./transfer-request.js";
 import { GasDepositVerificationRequest } from "./gas-deposit-request.js";
+import { ClaimRequest } from "./claim-request.js";
+import { ClaimVerificationRequest } from "./claim-verification-request.js";
 
 const contractAbi = [
   "function mintCard(address recipient,uint256 tokenId,uint256 amount,string tokenUri,bytes32 requestHash) external",
   "function mintedRequests(bytes32 requestHash) external view returns (bool)",
   "function balanceOf(address account,uint256 id) external view returns (uint256)",
   "function safeTransferFrom(address from,address to,uint256 id,uint256 amount,bytes data) external",
+  "function claimVersion() external view returns (uint256)",
+  "function claimCard(address recipient,address source,uint256 tokenId,uint256 amount,string tokenUri,bytes32 requestHash,uint256 deadline,bytes signature) external",
   "event TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)",
-  "event CardMinted(bytes32 indexed requestHash,address indexed recipient,uint256 indexed tokenId,uint256 amount,string tokenUri)"
+  "event CardMinted(bytes32 indexed requestHash,address indexed recipient,uint256 indexed tokenId,uint256 amount,string tokenUri)",
+  "event CardClaimed(bytes32 indexed requestHash,address indexed recipient,address indexed payer,address source,uint256 tokenId,uint256 amount,string tokenUri)"
 ];
+
+const claimTypes = {
+  CardClaim: [
+    { name: "recipient", type: "address" },
+    { name: "source", type: "address" },
+    { name: "tokenId", type: "uint256" },
+    { name: "amount", type: "uint256" },
+    { name: "tokenUriHash", type: "bytes32" },
+    { name: "requestHash", type: "bytes32" },
+    { name: "deadline", type: "uint256" },
+  ],
+};
 
 export interface MintResult {
   txHash: string;
@@ -24,10 +41,38 @@ export interface MintResult {
 }
 
 export interface MinterReadiness {
+  claimReady: boolean;
   gasReady: boolean;
   nativeCurrency: "POL" | "ETH";
   nativeBalanceWei: string;
   estimatedMintFeeWei: string;
+}
+
+export interface ClaimIntent {
+  chain: string;
+  chainId: number;
+  contractAddress: string;
+  recipientAddress: string;
+  sourceAddress: string;
+  tokenId: string;
+  requestHash: string;
+  expiresAt: string;
+  data: string;
+  value: "0x0";
+}
+
+export interface ClaimVerificationResult {
+  verified: boolean;
+  reason?: "TX_NOT_FOUND" | "TX_PENDING" | "TX_FAILED" | "CLAIM_MISMATCH" | "CONFIRMATIONS_PENDING";
+  txHash: string;
+  requestHash: string;
+  recipientAddress: string;
+  tokenId: string;
+  payerAddress?: string;
+  confirmations: number;
+  blockNumber?: number;
+  chain: string;
+  chainId: number;
 }
 
 export interface MinterOptions {
@@ -74,6 +119,7 @@ export class NftMinter {
   async readiness(): Promise<MinterReadiness> {
     if (!this.isConfigured()) {
       return {
+        claimReady: false,
         gasReady: false,
         nativeCurrency: this.nativeCurrency(),
         nativeBalanceWei: "0",
@@ -82,7 +128,7 @@ export class NftMinter {
     }
     const custodyAddress = await this.custodyAddress();
     const contract = new ethers.Contract(this.network.contractAddress, contractAbi, this.signer);
-    const [nativeBalance, feeData, gasUnits] = await Promise.all([
+    const [nativeBalance, feeData, gasUnits, claimVersion] = await Promise.all([
       this.provider.getBalance(custodyAddress),
       this.provider.getFeeData(),
       contract.mintCard.estimateGas(
@@ -92,10 +138,12 @@ export class NftMinter {
         "",
         ethers.id("korion-nft-readiness-check"),
       ) as Promise<bigint>,
+      contract.claimVersion().catch(() => 0n) as Promise<bigint>,
     ]);
     const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
     const estimatedMintFee = gasUnits * gasPrice * 120n / 100n;
     return {
+      claimReady: claimVersion === 1n,
       gasReady: gasPrice > 0n && nativeBalance >= estimatedMintFee,
       nativeCurrency: this.nativeCurrency(),
       nativeBalanceWei: nativeBalance.toString(),
@@ -186,6 +234,112 @@ export class NftMinter {
       chain: this.network.chain,
       chainId: this.network.chainId
     };
+  }
+
+  async prepareClaim(request: ClaimRequest): Promise<ClaimIntent> {
+    if (!this.isConfigured()) {
+      throw badRequest("MINTER_NOT_CONFIGURED", "CONTRACT_ADDRESS is required.");
+    }
+    if (request.chain && request.chain !== this.network.chain) {
+      throw badRequest("CHAIN_MISMATCH", `Request chain '${request.chain}' does not match '${this.network.chain}'.`);
+    }
+    if (request.contractAddress && request.contractAddress.toLowerCase() !== this.network.contractAddress.toLowerCase()) {
+      throw badRequest("CONTRACT_MISMATCH", "Request contractAddress does not match configured contract.");
+    }
+
+    const signer = this.signer as ethers.Signer;
+    if (typeof signer.signTypedData !== "function") {
+      throw new Error("Configured NFT signer cannot authorize claims.");
+    }
+    const contract = new ethers.Contract(this.network.contractAddress, contractAbi, signer);
+    const requestHash = ethers.id(request.idempotencyKey);
+    if (await contract.mintedRequests(requestHash)) {
+      throw conflict("ALREADY_CLAIMED", "Idempotency key was already claimed on-chain.");
+    }
+    const tokenId = request.tokenId ? BigInt(request.tokenId) : tokenIdFor(request);
+    const sourceAddress = request.sourceAddress || ethers.ZeroAddress;
+    const tokenUri = request.tokenUri || "";
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 10 * 60);
+    const claim = {
+      recipient: request.recipientAddress,
+      source: sourceAddress,
+      tokenId,
+      amount: 1n,
+      tokenUriHash: ethers.keccak256(ethers.toUtf8Bytes(tokenUri)),
+      requestHash,
+      deadline,
+    };
+    const signature = await signer.signTypedData({
+      name: "KORION Card Claim",
+      version: "1",
+      chainId: this.network.chainId,
+      verifyingContract: this.network.contractAddress,
+    }, claimTypes, claim);
+    const data = contract.interface.encodeFunctionData("claimCard", [
+      claim.recipient,
+      claim.source,
+      claim.tokenId,
+      claim.amount,
+      tokenUri,
+      claim.requestHash,
+      claim.deadline,
+      signature,
+    ]);
+    return {
+      chain: this.network.chain,
+      chainId: this.network.chainId,
+      contractAddress: this.network.contractAddress,
+      recipientAddress: request.recipientAddress,
+      sourceAddress,
+      tokenId: tokenId.toString(),
+      requestHash,
+      expiresAt: new Date(Number(deadline) * 1000).toISOString(),
+      data,
+      value: "0x0",
+    };
+  }
+
+  async verifyClaim(request: ClaimVerificationRequest): Promise<ClaimVerificationResult> {
+    const base = {
+      verified: false,
+      txHash: request.txHash,
+      requestHash: request.requestHash,
+      recipientAddress: request.recipientAddress,
+      tokenId: request.tokenId,
+      confirmations: 0,
+      chain: this.network.chain,
+      chainId: this.network.chainId,
+    };
+    const receipt = await this.provider.getTransactionReceipt(request.txHash);
+    if (!receipt) {
+      const transaction = await this.provider.getTransaction(request.txHash);
+      return { ...base, reason: transaction ? "TX_PENDING" : "TX_NOT_FOUND" };
+    }
+    const currentBlock = await this.provider.getBlockNumber();
+    const confirmations = Math.max(0, currentBlock - receipt.blockNumber + 1);
+    const details = { ...base, confirmations, blockNumber: receipt.blockNumber };
+    if (receipt.status !== 1) return { ...details, reason: "TX_FAILED" };
+    if (confirmations < request.minConfirmations) return { ...details, reason: "CONFIRMATIONS_PENDING" };
+
+    const contract = new ethers.Contract(this.network.contractAddress, contractAbi, this.signer);
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== this.network.contractAddress.toLowerCase()) continue;
+      try {
+        const event = contract.interface.parseLog(log);
+        if (event?.name !== "CardClaimed") continue;
+        if (String(event.args.requestHash).toLowerCase() !== request.requestHash.toLowerCase()) continue;
+        if (String(event.args.recipient).toLowerCase() !== request.recipientAddress.toLowerCase()) continue;
+        if (BigInt(event.args.tokenId) !== BigInt(request.tokenId)) continue;
+        return {
+          ...details,
+          verified: true,
+          payerAddress: String(event.args.payer),
+        };
+      } catch {
+        // Ignore logs emitted by other contracts in the same transaction.
+      }
+    }
+    return { ...details, reason: "CLAIM_MISMATCH" };
   }
 
   async transfer(request: TransferRequest): Promise<MintResult> {

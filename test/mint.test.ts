@@ -73,6 +73,7 @@ describe("POST /mint", () => {
       contractAddress: await ctx.contract.getAddress(),
       custodyAddress: ctx.deployer.address,
       contractConfigured: true,
+      claimReady: true,
       gasReady: true,
       nativeCurrency: "POL"
     });
@@ -322,6 +323,81 @@ describe("POST /mint", () => {
         chain: "POLYGON_AMOY",
         recipientAddress: ctx.recipient.address,
         card: baseCard
+      })
+      .expect(401);
+  });
+
+  it("prepares a one-time claim paid by MetaMask and sends the NFT to the entered recipient", async () => {
+    const [, payer, nftRecipient] = await hre.ethers.getSigners();
+    const payload = {
+      idempotencyKey: "card-gatcha-claim:123",
+      chain: "POLYGON_AMOY",
+      contractAddress: await ctx.contract.getAddress(),
+      recipientAddress: nftRecipient.address,
+      tokenUri: "https://metadata.example/cards/claim-123.json",
+      card: baseCard,
+    };
+
+    const prepared = await request(ctx.app)
+      .post("/claims/prepare")
+      .set("X-API-Key", "test-api-key")
+      .send(payload)
+      .expect(200);
+
+    expect(prepared.body).toMatchObject({
+      chain: "POLYGON_AMOY",
+      chainId: 31337,
+      contractAddress: await ctx.contract.getAddress(),
+      recipientAddress: nftRecipient.address,
+      value: "0x0",
+    });
+    expect(prepared.body.data).toMatch(/^0x[a-fA-F0-9]+$/);
+    expect(prepared.body.requestHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+
+    const tx = await payer.sendTransaction({
+      to: prepared.body.contractAddress,
+      data: prepared.body.data,
+      value: prepared.body.value,
+    });
+    await tx.wait();
+
+    const verified = await request(ctx.app)
+      .post("/claims/verify")
+      .set("X-API-Key", "test-api-key")
+      .send({
+        txHash: tx.hash,
+        requestHash: prepared.body.requestHash,
+        recipientAddress: nftRecipient.address,
+        tokenId: prepared.body.tokenId,
+        minConfirmations: 1,
+      })
+      .expect(200);
+
+    expect(verified.body).toMatchObject({
+      verified: true,
+      txHash: tx.hash,
+      requestHash: prepared.body.requestHash,
+      recipientAddress: nftRecipient.address,
+      tokenId: prepared.body.tokenId,
+      payerAddress: payer.address,
+    });
+
+    expect(await ctx.contract.balanceOf(nftRecipient.address, prepared.body.tokenId)).toBe(1n);
+    expect(await ctx.contract.balanceOf(payer.address, prepared.body.tokenId)).toBe(0n);
+    await expect(payer.sendTransaction({
+      to: prepared.body.contractAddress,
+      data: prepared.body.data,
+      value: prepared.body.value,
+    })).rejects.toThrow(/request already claimed/i);
+  });
+
+  it("requires the internal API key when preparing a claim", async () => {
+    await request(ctx.app)
+      .post("/claims/prepare")
+      .send({
+        idempotencyKey: "card-gatcha-claim:no-auth",
+        recipientAddress: ctx.recipient.address,
+        card: baseCard,
       })
       .expect(401);
   });

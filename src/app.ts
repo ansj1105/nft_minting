@@ -5,6 +5,8 @@ import { mintRequestSchema } from "./mint-request.js";
 import { ApiError, MintResult, NftMinter } from "./minter.js";
 import { transferRequestSchema } from "./transfer-request.js";
 import { gasDepositVerificationSchema } from "./gas-deposit-request.js";
+import { claimRequestSchema } from "./claim-request.js";
+import { claimVerificationRequestSchema } from "./claim-verification-request.js";
 
 interface AppOptions {
   config: AppConfig;
@@ -37,6 +39,7 @@ export function createApp(options: AppOptions) {
   app.get("/health", async (_req, res, next) => {
     try {
       const readiness = await minter.readiness().catch(() => ({
+        claimReady: false,
         gasReady: false,
         nativeCurrency: options.config.network.chain.startsWith("POLYGON") ? "POL" as const : "ETH" as const,
         nativeBalanceWei: "0",
@@ -83,6 +86,24 @@ export function createApp(options: AppOptions) {
       }
 
       res.json(await task);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/claims/prepare", requireApiKey(options.config.apiKey), async (req, res, next) => {
+    try {
+      const body = claimRequestSchema.parse(req.body);
+      res.json(await minter.prepareClaim(body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/claims/verify", requireApiKey(options.config.apiKey), async (req, res, next) => {
+    try {
+      const body = claimVerificationRequestSchema.parse(req.body);
+      res.json(await minter.verifyClaim(body));
     } catch (error) {
       next(error);
     }
