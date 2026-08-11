@@ -46,7 +46,9 @@ async function buildApp() {
 
   return {
     app: createApp({ config, minter }),
+    config,
     contract,
+    deployer,
     recipient
   };
 }
@@ -56,6 +58,22 @@ describe("POST /mint", () => {
 
   beforeEach(async () => {
     ctx = await buildApp();
+  });
+
+  it("reports the exact custody deployment used for deposit readiness checks", async () => {
+    const response = await request(ctx.app)
+      .get("/health")
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      ok: true,
+      networkEnv: "hardhat",
+      chain: "POLYGON_AMOY",
+      chainId: 31337,
+      contractAddress: await ctx.contract.getAddress(),
+      custodyAddress: ctx.deployer.address,
+      contractConfigured: true
+    });
   });
 
   it("mints one ERC-1155 card on the configured Polygon testnet profile", async () => {
@@ -236,6 +254,86 @@ describe("POST /mint", () => {
         card: baseCard
       })
       .expect(401);
+  });
+
+  it("releases a deposited ERC-1155 card from the custody signer without minting another token", async () => {
+    const [deployer] = await hre.ethers.getSigners();
+    const tokenId = 987654321n;
+    const depositFixture = await ctx.contract.mintCard(
+      deployer.address,
+      tokenId,
+      1,
+      "",
+      hre.ethers.id("custody-deposit-fixture"),
+    );
+    const depositReceipt = await depositFixture.wait();
+    const supplyBefore = await ctx.contract.balanceOf(deployer.address, tokenId)
+      + await ctx.contract.balanceOf(ctx.recipient.address, tokenId);
+
+    const response = await request(ctx.app)
+      .post("/transfer")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", "card-gatcha-transfer:123")
+      .send({
+        idempotencyKey: "card-gatcha-transfer:123",
+        chain: "POLYGON_AMOY",
+        contractAddress: await ctx.contract.getAddress(),
+        recipientAddress: ctx.recipient.address,
+        custodyAddress: deployer.address,
+        tokenId: tokenId.toString(),
+        amount: "1",
+        sourceTxHash: depositReceipt!.hash,
+      })
+      .expect(200);
+
+    expect(response.body.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    expect(response.body.tokenId).toBe(tokenId.toString());
+    expect(await ctx.contract.balanceOf(ctx.recipient.address, tokenId)).toBe(1n);
+    const supplyAfter = await ctx.contract.balanceOf(deployer.address, tokenId)
+      + await ctx.contract.balanceOf(ctx.recipient.address, tokenId);
+    expect(supplyAfter).toBe(supplyBefore);
+
+    const restartedApp = createApp({
+      config: ctx.config,
+      minter: new NftMinter({
+        network: ctx.config.network,
+        privateKey: ctx.config.privateKey,
+        signer: ctx.deployer as never,
+      }),
+    });
+    const duplicate = await request(restartedApp)
+      .post("/transfer")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", "card-gatcha-transfer:123")
+      .send({
+        idempotencyKey: "card-gatcha-transfer:123",
+        chain: "POLYGON_AMOY",
+        contractAddress: await ctx.contract.getAddress(),
+        recipientAddress: ctx.recipient.address,
+        custodyAddress: deployer.address,
+        tokenId: tokenId.toString(),
+        amount: "1",
+        sourceTxHash: depositReceipt!.hash,
+      })
+      .expect(200);
+    expect(duplicate.body.txHash).toBe(response.body.txHash);
+
+    await request(restartedApp)
+      .post("/transfer")
+      .set("X-API-Key", "test-api-key")
+      .set("Idempotency-Key", "card-gatcha-transfer:wrong-custody")
+      .send({
+        idempotencyKey: "card-gatcha-transfer:wrong-custody",
+        chain: "POLYGON_AMOY",
+        contractAddress: await ctx.contract.getAddress(),
+        recipientAddress: ctx.recipient.address,
+        custodyAddress: ctx.recipient.address,
+        tokenId: tokenId.toString(),
+        amount: "1",
+        sourceTxHash: depositReceipt!.hash,
+      })
+      .expect(400)
+      .expect((failure) => expect(failure.body.code).toBe("CUSTODY_ADDRESS_MISMATCH"));
   });
 
   it("rejects an invalid private key without echoing the configured value", () => {

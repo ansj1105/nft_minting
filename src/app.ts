@@ -3,6 +3,7 @@ import { AppConfig } from "./config.js";
 import { logger } from "./logger.js";
 import { mintRequestSchema } from "./mint-request.js";
 import { ApiError, MintResult, NftMinter } from "./minter.js";
+import { transferRequestSchema } from "./transfer-request.js";
 
 interface AppOptions {
   config: AppConfig;
@@ -32,14 +33,20 @@ export function createApp(options: AppOptions) {
     next();
   });
 
-  app.get("/health", (_req, res) => {
-    res.json({
-      ok: true,
-      networkEnv: options.config.networkEnv,
-      chain: options.config.network.chain,
-      chainId: options.config.network.chainId,
-      contractConfigured: minter.isConfigured()
-    });
+  app.get("/health", async (_req, res, next) => {
+    try {
+      res.json({
+        ok: true,
+        networkEnv: options.config.networkEnv,
+        chain: options.config.network.chain,
+        chainId: options.config.network.chainId,
+        contractAddress: options.config.network.contractAddress,
+        custodyAddress: await minter.custodyAddress(),
+        contractConfigured: minter.isConfigured()
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post("/mint", requireApiKey(options.config.apiKey), async (req, res, next) => {
@@ -73,13 +80,40 @@ export function createApp(options: AppOptions) {
     }
   });
 
+  app.post("/transfer", requireApiKey(options.config.apiKey), async (req, res, next) => {
+    try {
+      const body = transferRequestSchema.parse(req.body);
+      const idempotencyHeader = req.header("Idempotency-Key");
+      if (idempotencyHeader && idempotencyHeader !== body.idempotencyKey) {
+        throw new ApiError(400, "IDEMPOTENCY_MISMATCH", "Idempotency-Key header must match body.idempotencyKey.");
+      }
+      const cacheKey = `transfer:${body.idempotencyKey}`;
+      const cached = completed.get(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
+      }
+      let task = inFlight.get(cacheKey);
+      if (!task) {
+        task = minter.transfer(body).then((result) => {
+          completed.set(cacheKey, result);
+          return result;
+        }).finally(() => inFlight.delete(cacheKey));
+        inFlight.set(cacheKey, task);
+      }
+      res.json(await task);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof ApiError) {
       res.status(error.status).json({ code: error.code, message: error.message });
       return;
     }
     if (typeof error === "object" && error && "name" in error && error.name === "ZodError") {
-      res.status(400).json({ code: "VALIDATION_ERROR", message: "Invalid mint request." });
+      res.status(400).json({ code: "VALIDATION_ERROR", message: "Invalid NFT request." });
       return;
     }
     logger.error({ err: error }, "Unhandled request error");

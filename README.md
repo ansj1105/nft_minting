@@ -2,7 +2,7 @@
 
 Internal minter service for card-gatcha NFT issuance.
 
-`coin_csms` calls `POST /mint`; this service owns the chain private key boundary and sends the Polygon transaction.
+`coin_csms` calls `POST /mint` for first issuance and `POST /transfer` for a card already returned to custody. This service owns the chain private key boundary and sends the Polygon transaction.
 
 ## Network Switching
 
@@ -35,6 +35,7 @@ PORT=8088
 NETWORK_ENV=polygon-amoy
 MINTER_API_KEY=replace-with-shared-api-key
 MINTER_PRIVATE_KEY=replace-with-private-key
+CUSTODY_ADDRESS=0x0000000000000000000000000000000000000000
 CONTRACT_ADDRESS=
 ```
 
@@ -69,7 +70,7 @@ After deploy, set `CONTRACT_ADDRESS` in runtime config or `config/networks.json`
 NETWORK_ENV=polygon-amoy CONTRACT_ADDRESS=<amoy-contract> MINTER_PRIVATE_KEY=<runtime-secret> MINTER_API_KEY=<runtime-secret> npm run check:network
 ```
 
-The minter service should stay internal or loopback-bound. Browser frontend code must not call it directly; `coin_csms` calls `POST /mint` with `X-API-Key` and idempotency.
+The minter service should stay internal or loopback-bound. Browser frontend code must not call it directly; `coin_csms` calls `POST /mint` or `POST /transfer` with `X-API-Key` and idempotency.
 
 ## Production Delivery
 
@@ -98,6 +99,7 @@ Content-Type: application/json
   "chain": "POLYGON_AMOY",
   "contractAddress": "0x...",
   "recipientAddress": "0x...",
+  "custodyAddress": "0x...",
   "tokenUri": "https://metadata.example/cards/KOR-S01-COM-00001-000001.json",
   "card": {
     "id": 123,
@@ -125,3 +127,26 @@ Response:
   "tokenUri": "https://..."
 }
 ```
+
+Returned cards are released from the custody signer without minting a second token:
+
+```http
+POST /transfer
+X-API-Key: <MINTER_API_KEY>
+Idempotency-Key: <withdrawal-request-id>
+Content-Type: application/json
+```
+
+```json
+{
+  "idempotencyKey": "<withdrawal-request-id>",
+  "chain": "POLYGON_AMOY",
+  "contractAddress": "0x...",
+  "recipientAddress": "0x...",
+  "tokenId": "123456",
+  "amount": "1",
+  "sourceTxHash": "0x..."
+}
+```
+
+`custodyAddress` must equal the service signer's public address. `sourceTxHash` is the verified custody-deposit transaction. It lets a restarted service resolve an already completed release from chain logs instead of sending the NFT twice.

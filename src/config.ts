@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { ethers } from "ethers";
+import { normalizePrivateKey } from "./private-key.js";
 
 const networkConfigSchema = z.object({
   chain: z.string().min(1),
@@ -19,6 +21,7 @@ export interface AppConfig {
   port: number;
   apiKey: string;
   privateKey: string;
+  custodyAddress?: string;
   networkEnv: string;
   network: NetworkConfig;
 }
@@ -48,10 +51,22 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("CONTRACT_DEPLOYMENT_BLOCK is required when CONTRACT_ADDRESS is configured.");
   }
 
+  const privateKey = env.MINTER_PRIVATE_KEY || "";
+  const custodyAddress = env.CUSTODY_ADDRESS?.trim();
+  if (privateKey && !privateKey.startsWith("replace-")) {
+    if (!custodyAddress || !/^0x[a-fA-F0-9]{40}$/.test(custodyAddress)) {
+      throw new Error("CUSTODY_ADDRESS is required when MINTER_PRIVATE_KEY is configured.");
+    }
+    if (ethers.computeAddress(normalizePrivateKey(privateKey)).toLowerCase() !== custodyAddress.toLowerCase()) {
+      throw new Error("CUSTODY_ADDRESS does not match the configured NFT signer.");
+    }
+  }
+
   return {
     port: Number(env.PORT || 8088),
     apiKey: env.MINTER_API_KEY || "",
-    privateKey: env.MINTER_PRIVATE_KEY || "",
+    privateKey,
+    custodyAddress,
     networkEnv,
     network: {
       ...selected,

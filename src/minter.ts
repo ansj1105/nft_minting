@@ -2,10 +2,14 @@ import { ethers } from "ethers";
 import { NetworkConfig } from "./config.js";
 import { MintRequest, tokenIdFor } from "./mint-request.js";
 import { normalizePrivateKey } from "./private-key.js";
+import { TransferRequest } from "./transfer-request.js";
 
 const contractAbi = [
   "function mintCard(address recipient,uint256 tokenId,uint256 amount,string tokenUri,bytes32 requestHash) external",
   "function mintedRequests(bytes32 requestHash) external view returns (bool)",
+  "function balanceOf(address account,uint256 id) external view returns (uint256)",
+  "function safeTransferFrom(address from,address to,uint256 id,uint256 amount,bytes data) external",
+  "event TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)",
   "event CardMinted(bytes32 indexed requestHash,address indexed recipient,uint256 indexed tokenId,uint256 amount,string tokenUri)"
 ];
 
@@ -32,12 +36,17 @@ export class NftMinter {
 
   constructor(options: MinterOptions) {
     this.network = options.network;
-    this.provider = options.provider || new ethers.JsonRpcProvider(options.network.rpcUrl, options.network.chainId);
-    this.signer = options.signer || new ethers.Wallet(normalizePrivateKey(options.privateKey), this.provider);
+    const fallbackProvider = options.provider || new ethers.JsonRpcProvider(options.network.rpcUrl, options.network.chainId);
+    this.signer = options.signer || new ethers.Wallet(normalizePrivateKey(options.privateKey), fallbackProvider);
+    this.provider = options.provider || (this.signer as ethers.Signer).provider || fallbackProvider;
   }
 
   isConfigured(): boolean {
     return Boolean(this.network.contractAddress && this.network.contractAddress.trim());
+  }
+
+  async custodyAddress(): Promise<string> {
+    return (this.signer as ethers.Signer).getAddress();
   }
 
   async mint(request: MintRequest): Promise<MintResult> {
@@ -82,6 +91,84 @@ export class NftMinter {
       tokenUri: request.tokenUri,
       chain: this.network.chain,
       chainId: this.network.chainId
+    };
+  }
+
+  async transfer(request: TransferRequest): Promise<MintResult> {
+    if (!this.isConfigured()) {
+      throw badRequest("MINTER_NOT_CONFIGURED", "CONTRACT_ADDRESS is required.");
+    }
+    if (request.chain && request.chain !== this.network.chain) {
+      throw badRequest("CHAIN_MISMATCH", `Request chain '${request.chain}' does not match '${this.network.chain}'.`);
+    }
+    if (request.contractAddress && request.contractAddress.toLowerCase() !== this.network.contractAddress.toLowerCase()) {
+      throw badRequest("CONTRACT_MISMATCH", "Request contractAddress does not match configured contract.");
+    }
+
+    const tokenId = BigInt(request.tokenId);
+    const amount = BigInt(request.amount);
+    const custodyAddress = await (this.signer as ethers.Signer).getAddress();
+    if (request.custodyAddress.toLowerCase() !== custodyAddress.toLowerCase()) {
+      throw badRequest("CUSTODY_ADDRESS_MISMATCH", "Configured custody address does not match the NFT signer.");
+    }
+    const contract = new ethers.Contract(this.network.contractAddress, contractAbi, this.signer);
+    const existing = await this.findExistingTransfer(contract, custodyAddress, request);
+    if (existing) {
+      return existing;
+    }
+    const custodyBalance = BigInt(await contract.balanceOf(custodyAddress, tokenId));
+    if (custodyBalance < amount) {
+      throw conflict("CUSTODY_BALANCE_MISSING", "Custody wallet does not hold the requested NFT amount.");
+    }
+    const tx = await contract.safeTransferFrom(
+      custodyAddress,
+      request.recipientAddress,
+      tokenId,
+      amount,
+      "0x",
+    );
+    const receipt = await tx.wait();
+    if (!receipt?.hash) {
+      throw new Error("Transfer transaction receipt missing hash.");
+    }
+    return {
+      txHash: receipt.hash,
+      tokenId: tokenId.toString(),
+      contractAddress: this.network.contractAddress,
+      chain: this.network.chain,
+      chainId: this.network.chainId,
+    };
+  }
+
+  private async findExistingTransfer(
+    contract: ethers.Contract,
+    custodyAddress: string,
+    request: TransferRequest,
+  ): Promise<MintResult | null> {
+    const sourceReceipt = await this.provider.getTransactionReceipt(request.sourceTxHash);
+    if (!sourceReceipt) {
+      throw badRequest("SOURCE_TX_NOT_FOUND", "Custody deposit transaction was not found.");
+    }
+    const filter = contract.filters.TransferSingle(null, custodyAddress, request.recipientAddress);
+    const events = await contract.queryFilter(filter, sourceReceipt.blockNumber, "latest");
+    const tokenId = BigInt(request.tokenId);
+    const amount = BigInt(request.amount);
+    let event: ethers.EventLog | undefined;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const candidate = events[index];
+      if (!(candidate instanceof ethers.EventLog)) continue;
+      if (BigInt(candidate.args.id) === tokenId && BigInt(candidate.args.value) === amount) {
+        event = candidate;
+        break;
+      }
+    }
+    if (!event) return null;
+    return {
+      txHash: event.transactionHash,
+      tokenId: request.tokenId,
+      contractAddress: this.network.contractAddress,
+      chain: this.network.chain,
+      chainId: this.network.chainId,
     };
   }
 
