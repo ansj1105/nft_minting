@@ -74,15 +74,18 @@ The minter service should stay internal or loopback-bound. Browser frontend code
 
 ## Production Delivery
 
-- `deploy-role` (`44.204.112.143`, `deployer`) is the only GitHub-authenticated
-  deployment principal. The minter host receives an approved Git bundle over
-  SSH and does not store GitHub tokens, deploy keys, or a copied personal PEM.
+- The reviewed GitHub-hosted Actions workflow authenticates through
+  exact-repository/ref OIDC, pushes an immutable image to
+  `korion/prod/foxya/nft-minting`, and invokes the instance-scoped SSM document.
+  The minter host does not store GitHub tokens, deploy keys, long-lived AWS
+  credentials, or a copied personal PEM.
 - Keep runtime `.env` and minter secrets host-local. A deploy may update the
   checked-out commit and container image, but must never print or overwrite
   secret values.
-- Deploy a candidate first, gate `GET /health`, then swap the internal
-  `nft-minting` container. Confirm `networkEnv=polygon-amoy`, chain ID `80002`,
-  and `contractConfigured=true` before enabling any worker.
+- Deploy the exact digest as a candidate first, gate `GET /health`, then swap
+  the internal `nft-minting` container. Promote ECR `current`/`previous` only
+  after success. Confirm `networkEnv=polygon-amoy`, chain ID `80002`, and
+  `contractConfigured=true` before enabling any worker.
 
 ## API
 
