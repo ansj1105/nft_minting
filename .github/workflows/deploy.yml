@@ -54,8 +54,8 @@ jobs:
           if (!image) throw new Error('nft-minting image definition is missing');
           const values = {
             region: manifest.awsRegion,
-             role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
-             deployer_role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.deployerRoleName}`,
+            role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
+            deployer_role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.deployerRoleName}`,
             registry: `${manifest.accountId}.dkr.ecr.${manifest.awsRegion}.amazonaws.com`,
             repository: image.repository,
             context: image.context,
@@ -95,4 +95,4 @@ jobs:
           IMAGE_URI: ${{ needs.build_push.outputs.registry }}/${{ needs.build_push.outputs.repository }}@${{ needs.build_push.outputs.digest }}
           SOURCE_SHA: ${{ github.sha }}
           ECR_CONFIG: deploy/ecr-images.json
-         run: bash scripts/deploy-via-ssm.sh
+        run: bash scripts/deploy-via-ssm.sh

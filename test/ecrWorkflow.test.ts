@@ -24,6 +24,7 @@ describe("ECR delivery workflow", () => {
     expect(workflow).toContain("runs-on: ubuntu-latest");
     expect(workflow).not.toContain("runs-on: [self-hosted");
     expect(workflow).not.toContain("command -v python3 aws ssh");
+    expect(workflow).not.toMatch(/^         run:/m);
     expect(workflow).not.toContain("git bundle create");
     expect(workflow).not.toContain("sudo docker build");
   });
