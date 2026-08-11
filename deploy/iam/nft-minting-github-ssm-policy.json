@@ -3,7 +3,7 @@
   "Statement":[
     {"Sid":"SendOnlyNftDocumentToFoxya","Effect":"Allow","Action":"ssm:SendCommand","Resource":["arn:aws:ssm:us-east-1:076472863936:document/Korion-Deploy-NftMinting-Ecr","arn:aws:ec2:us-east-1:076472863936:instance/i-0958ccd4996b013d4"]},
     {"Sid":"InspectCommand","Effect":"Allow","Action":["ssm:DescribeInstanceInformation","ssm:GetCommandInvocation"],"Resource":"*"},
-    {"Sid":"ReadDocument","Effect":"Allow","Action":"ssm:DescribeDocument","Resource":"arn:aws:ssm:us-east-1:076472863936:document/Korion-Deploy-NftMinting-Ecr"},
+    {"Sid":"ManageDocument","Effect":"Allow","Action":["ssm:DescribeDocument","ssm:UpdateDocument"],"Resource":"arn:aws:ssm:us-east-1:076472863936:document/Korion-Deploy-NftMinting-Ecr"},
     {"Sid":"PromoteOnlyNftImages","Effect":"Allow","Action":["ecr:BatchDeleteImage","ecr:BatchGetImage","ecr:DescribeImages","ecr:PutImage"],"Resource":"arn:aws:ecr:us-east-1:076472863936:repository/korion/prod/foxya/nft-minting"}
   ]
 }

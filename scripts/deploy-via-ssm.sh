@@ -16,20 +16,32 @@ if [[ "$action" == deploy ]]; then
 fi
 if [[ ${DRY_RUN:-0} == 1 ]]; then echo "[dry-run] action=${action} document=${document} instance=${instance_id}"; exit 0; fi
 aws ssm describe-document --region "$region" --name "$document" >/dev/null
+if ! update_output=$(aws ssm update-document --region "$region" --name "$document" --document-version '$LATEST' --document-format YAML --content file://deploy/ssm/nft-minting-deploy.yml 2>&1); then
+  [[ "$update_output" == *DuplicateDocumentContent* ]] || { printf '%s\n' "$update_output" >&2; exit 1; }
+fi
 [[ $(aws ssm describe-instance-information --region "$region" --filters "Key=InstanceIds,Values=${instance_id}" --query 'InstanceInformationList[0].PingStatus' --output text) == Online ]] || exit 1
 manifest_for(){ aws ecr batch-get-image --region "$region" --repository-name "$repository" --image-ids "imageDigest=$1" --query 'images[0].imageManifest' --output text; }
 put_pointer(){ local tag=$1 digest=$2 manifest; manifest=$(manifest_for "$digest"); [[ -n "$manifest" && "$manifest" != None ]] || return 1; aws ecr put-image --region "$region" --repository-name "$repository" --image-tag "$tag" --image-manifest "$manifest" >/dev/null; }
 run_command(){
-  local command_action=$1 command_image=${2:-} command_sha=${3:-} expected=${4:-} command_id status parameters
-  parameters=$(node -e 'const v={Action:[process.argv[1]]};if(process.argv[1]==="deploy")Object.assign(v,{ImageUri:[process.argv[2]],SourceSha:[process.argv[3]],ExpectedCurrentImage:[process.argv[4]]});console.log(JSON.stringify(v))' "$command_action" "$command_image" "$command_sha" "$expected")
-  command_id=$(aws ssm send-command --region "$region" --instance-ids "$instance_id" --document-name "$document" --comment "nft_minting ${command_action} ${source_sha:-manual}" --parameters "$parameters" --timeout-seconds 900 --max-concurrency 1 --max-errors 0 --query 'Command.CommandId' --output text)
+  local command_action=$1 deployment_key=$2 command_image=${3:-} command_sha=${4:-} expected=${5:-} command_id status parameters
+  parameters=$(node -e 'const v={Action:[process.argv[1]],DeploymentKey:[process.argv[2]]};if(process.argv[1]==="deploy")Object.assign(v,{ImageUri:[process.argv[3]],SourceSha:[process.argv[4]],ExpectedCurrentImage:[process.argv[5]]});console.log(JSON.stringify(v))' "$command_action" "$deployment_key" "$command_image" "$command_sha" "$expected")
+  command_id=$(aws ssm send-command --region "$region" --instance-ids "$instance_id" --document-name "$document" --document-version '$LATEST' --comment "nft_minting ${deployment_key} ${command_action} ${source_sha:-manual}" --parameters "$parameters" --timeout-seconds 900 --max-concurrency 1 --max-errors 0 --query 'Command.CommandId' --output text)
   for _ in $(seq 1 190); do status=$(aws ssm get-command-invocation --region "$region" --command-id "$command_id" --instance-id "$instance_id" --query Status --output text 2>/dev/null || true); case "$status" in Success) aws ssm get-command-invocation --region "$region" --command-id "$command_id" --instance-id "$instance_id" --query StandardOutputContent --output text; return 0;; Failed|Cancelled|TimedOut|Cancelling) aws ssm get-command-invocation --region "$region" --command-id "$command_id" --instance-id "$instance_id" --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}' --output json >&2 || true; return 1;; esac; sleep 5; done; return 1
 }
 current_digest=$(aws ecr describe-images --region "$region" --repository-name "$repository" --image-ids imageTag=current --query 'imageDetails[0].imageDigest' --output text)
 [[ "$current_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
-if [[ "$action" == rollback ]]; then previous_digest=$(aws ecr describe-images --region "$region" --repository-name "$repository" --image-ids imageTag=previous --query 'imageDetails[0].imageDigest' --output text); [[ "$previous_digest" =~ ^sha256:[0-9a-f]{64}$ && "$previous_digest" != "$current_digest" ]] || exit 1; run_command rollback; put_pointer current "$previous_digest"; put_pointer previous "$current_digest" || true; exit 0; fi
+if [[ "$action" == rollback ]]; then
+  previous_digest=$(aws ecr describe-images --region "$region" --repository-name "$repository" --image-ids imageTag=previous --query 'imageDetails[0].imageDigest' --output text)
+  [[ "$previous_digest" =~ ^sha256:[0-9a-f]{64}$ && "$previous_digest" != "$current_digest" ]] || exit 1
+  run_command rollback nft-minting-sepolia
+  run_command rollback nft-minting
+  put_pointer current "$previous_digest"; put_pointer previous "$current_digest" || true
+  exit 0
+fi
 new_digest=${image_uri##*@}; [[ "$new_digest" != "$current_digest" ]] || { echo 'requested digest is already current'; exit 0; }
-run_command deploy "$image_uri" "$source_sha" "${registry}/${repository}@${current_digest}"
-if ! put_pointer previous "$current_digest" || ! put_pointer current "$new_digest"; then run_command rollback || true; exit 1; fi
+current_image="${registry}/${repository}@${current_digest}"
+run_command deploy nft-minting "$image_uri" "$source_sha" "$current_image"
+if ! run_command deploy nft-minting-sepolia "$image_uri" "$source_sha" "$current_image"; then run_command rollback nft-minting || true; exit 1; fi
+if ! put_pointer previous "$current_digest" || ! put_pointer current "$new_digest"; then run_command rollback nft-minting-sepolia || true; run_command rollback nft-minting || true; exit 1; fi
 aws ecr batch-delete-image --region "$region" --repository-name "$repository" --image-ids "imageTag=candidate-${source_sha}" >/dev/null 2>&1 || true
 echo "deployed ${image_uri} through SSM"

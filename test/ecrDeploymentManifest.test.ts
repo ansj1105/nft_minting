@@ -33,6 +33,28 @@ const validManifest = {
         healthUrl: "http://127.0.0.1:8088/health",
       },
     },
+    {
+      key: "nft-minting-sepolia",
+      environment: "prod",
+      hostKey: "foxya",
+      project: "nft-minting",
+      repository: "korion/prod/foxya/nft-minting",
+      context: ".",
+      dockerfile: "Dockerfile",
+      platform: "linux/amd64",
+      deployment: {
+        driver: "docker-run",
+        instanceId: "i-0958ccd4996b013d4",
+        ssmDocument: "Korion-Deploy-NftMinting-Ecr",
+        endpoint: "ubuntu@52.200.97.155",
+        container: "nft-minting-sepolia",
+        candidateContainer: "nft-minting-sepolia-candidate",
+        network: "coin-shared",
+        envFile: "/etc/korion/nft-minting/sepolia.env",
+        stateFile: "/var/lib/korion-deploy/nft-minting-sepolia.env",
+        healthUrl: "http://127.0.0.1:8088/health",
+      },
+    },
   ],
 };
 
@@ -53,6 +75,10 @@ describe("ECR deployment manifest", () => {
     expect(manifest.images[0].deployment.instanceId).toBe("i-0958ccd4996b013d4");
     expect(manifest.images[0].deployment.stateFile).toBe(
       "/var/lib/korion-deploy/nft-minting.env",
+    );
+    expect(manifest.images[1].key).toBe("nft-minting-sepolia");
+    expect(manifest.images[1].deployment.envFile).toBe(
+      "/etc/korion/nft-minting/sepolia.env",
     );
   });
 

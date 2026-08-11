@@ -41,4 +41,10 @@ describe("ECR delivery workflow", () => {
       "repo:ansj1105@85127906/nft_minting@1323170566:ref:refs/heads/main",
     );
   });
+
+  it("deploys the same immutable image to Amoy and Sepolia runtimes", () => {
+    expect(workflow).toContain("Deploy exact digest to Amoy and Sepolia");
+    expect(workflow).toContain("scripts/deploy-via-ssm.sh");
+    expect(workflow).not.toContain("scripts/deploy-ecr-image.sh");
+  });
 });

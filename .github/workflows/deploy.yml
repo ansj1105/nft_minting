@@ -90,7 +90,7 @@ jobs:
         with:
           role-to-assume: ${{ needs.build_push.outputs.deployer_role_arn }}
           aws-region: ${{ needs.build_push.outputs.region }}
-      - name: Deploy exact digest and promote pointers
+      - name: Deploy exact digest to Amoy and Sepolia
         env:
           IMAGE_URI: ${{ needs.build_push.outputs.registry }}/${{ needs.build_push.outputs.repository }}@${{ needs.build_push.outputs.digest }}
           SOURCE_SHA: ${{ github.sha }}

@@ -4,6 +4,7 @@ set -euo pipefail
 config=${ECR_CONFIG:-deploy/ecr-images.json}
 image_uri=${IMAGE_URI:-}
 source_sha=${SOURCE_SHA:-}
+deployment_key=${DEPLOYMENT_KEY:-nft-minting}
 
 if [[ ! "$image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
   echo "IMAGE_URI must reference an immutable digest" >&2
@@ -14,15 +15,15 @@ if [[ ! "$source_sha" =~ ^[0-9a-f]{6,40}$ ]]; then
   exit 2
 fi
 
-mapfile -t config_values < <(python3 - "$config" <<'PY'
+mapfile -t config_values < <(python3 - "$config" "$deployment_key" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     manifest = json.load(handle)
-image = next((entry for entry in manifest["images"] if entry["key"] == "nft-minting"), None)
+image = next((entry for entry in manifest["images"] if entry["key"] == sys.argv[2]), None)
 if image is None:
-    raise RuntimeError("nft-minting image definition is missing")
+    raise RuntimeError(f"{sys.argv[2]} image definition is missing")
 deployment = image["deployment"]
 for value in (manifest["awsRegion"], manifest["accountId"], image["repository"], deployment["endpoint"], deployment["container"], deployment["candidateContainer"], deployment["network"], deployment["envFile"], deployment["stateFile"], deployment["healthUrl"]):
     print(value)
@@ -185,8 +186,8 @@ then
   exit 1
 fi
 
-if [[ ${ROLLBACK_MODE:-0} != 1 ]]; then
-  aws ecr batch-delete-image --region "$region" --repository-name "$repository" --image-ids imageTag="candidate-${source_sha}" >/dev/null
+if [[ ${ROLLBACK_MODE:-0} != 1 && "$deployment_key" == "nft-minting" ]]; then
+  aws ecr batch-delete-image --region "$region" --repository-name "$repository" --image-ids imageTag="candidate-${source_sha}" >/dev/null 2>&1 || true
 fi
 trap - EXIT
 echo "deployed ${image_uri}"

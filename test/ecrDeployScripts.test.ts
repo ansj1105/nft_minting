@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -40,6 +41,19 @@ describe("ECR deployment scripts", () => {
     expect(result.stdout).not.toContain("amoy.env contents");
   });
 
+  it("selects the Sepolia deployment without exposing its env contents", () => {
+    const result = run("deploy-ecr-image.sh", {
+      IMAGE_URI: image,
+      SOURCE_SHA: "abc123",
+      DEPLOYMENT_KEY: "nft-minting-sepolia",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("nft-minting-sepolia-candidate");
+    expect(result.stdout).toContain("/var/lib/korion-deploy/nft-minting-sepolia.env");
+    expect(result.stdout).not.toContain("sepolia.env contents");
+  });
+
   it("requires a distinct previous digest for rollback", () => {
     const result = run("rollback-ecr-image.sh", {});
 
@@ -54,5 +68,19 @@ describe("ECR deployment scripts", () => {
     expect(result.stdout).toContain("Korion-Deploy-NftMinting-Ecr");
     expect(result.stdout).toContain("i-0958ccd4996b013d4");
     expect(result.stdout).not.toContain("amoy.env contents");
+  });
+
+  it("deploys both testnet runtimes through the latest SSM document", () => {
+    const wrapper = readFileSync(resolve(root, "scripts/deploy-via-ssm.sh"), "utf8");
+    const document = readFileSync(resolve(root, "deploy/ssm/nft-minting-deploy.yml"), "utf8");
+    const policy = readFileSync(resolve(root, "deploy/iam/nft-minting-github-ssm-policy.json"), "utf8");
+
+    expect(wrapper).toContain("ssm update-document");
+    expect(wrapper).toContain("--document-version '$LATEST'");
+    expect(wrapper).toContain('run_command deploy nft-minting');
+    expect(wrapper).toContain('run_command deploy nft-minting-sepolia');
+    expect(document).toContain("DeploymentKey:");
+    expect(document).toContain("/etc/korion/nft-minting/sepolia.env");
+    expect(policy).toContain("ssm:UpdateDocument");
   });
 });

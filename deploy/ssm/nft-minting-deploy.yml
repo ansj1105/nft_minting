@@ -3,6 +3,11 @@ schemaVersion: '2.2'
 description: Deploy or roll back the nft_minting immutable ECR image.
 parameters:
   Action: {type: String, default: deploy, allowedValues: [deploy, rollback], interpolationType: ENV_VAR}
+  DeploymentKey:
+    type: String
+    default: nft-minting
+    allowedValues: [nft-minting, nft-minting-sepolia]
+    interpolationType: ENV_VAR
   ImageUri:
     type: String
     default: ''
@@ -25,10 +30,21 @@ mainSteps:
           #!/usr/bin/env bash
           [ -n "${BASH_VERSION:-}" ] || exec /usr/bin/env bash "$0" "$@"
           set -euo pipefail
-          action=${SSM_Action:?Action is required}; image_uri=${SSM_ImageUri:-}; source_sha=${SSM_SourceSha:-}; expected_current=${SSM_ExpectedCurrentImage:-}
+          action=${SSM_Action:?Action is required}; deployment_key=${SSM_DeploymentKey:?DeploymentKey is required}
+          image_uri=${SSM_ImageUri:-}; source_sha=${SSM_SourceSha:-}; expected_current=${SSM_ExpectedCurrentImage:-}
           region=us-east-1; registry=076472863936.dkr.ecr.us-east-1.amazonaws.com; repository=korion/prod/foxya/nft-minting
-          container=nft-minting; candidate=nft-minting-candidate; network=coin-shared; env_file=/etc/korion/nft-minting/amoy.env
-          state_file=/var/lib/korion-deploy/nft-minting.env; health_url=http://127.0.0.1:8088/health
+          network=coin-shared; health_url=http://127.0.0.1:8088/health
+          case "$deployment_key" in
+            nft-minting)
+              container=nft-minting; candidate=nft-minting-candidate
+              env_file=/etc/korion/nft-minting/amoy.env; state_file=/var/lib/korion-deploy/nft-minting.env
+              ;;
+            nft-minting-sepolia)
+              container=nft-minting-sepolia; candidate=nft-minting-sepolia-candidate
+              env_file=/etc/korion/nft-minting/sepolia.env; state_file=/var/lib/korion-deploy/nft-minting-sepolia.env
+              ;;
+            *) echo 'unsupported deployment key' >&2; exit 2 ;;
+          esac
           image_pattern='^076472863936\.dkr\.ecr\.us-east-1\.amazonaws\.com/korion/prod/foxya/nft-minting@sha256:[0-9a-f]{64}$'
           exec 9>/var/lock/korion-nft-minting-deploy.lock; flock -n 9 || exit 1
           test -s "$state_file" && test -s "$env_file" || { echo 'deployment state or env file is missing' >&2; exit 1; }
