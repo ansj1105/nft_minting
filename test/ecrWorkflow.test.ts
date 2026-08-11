@@ -17,9 +17,13 @@ describe("ECR delivery workflow", () => {
     expect(workflow).not.toContain("AWS_ROLE_ARN:");
   });
 
-  it("deploys an exported digest without building or bundling on production", () => {
-    expect(workflow).toContain("scripts/deploy-ecr-image.sh");
+  it("deploys an exported digest through repository-scoped SSM", () => {
+    expect(workflow).toContain("scripts/deploy-via-ssm.sh");
     expect(workflow).toContain("@${{ needs.build_push.outputs.digest }}");
+    expect(workflow).toContain("deployer_role_arn");
+    expect(workflow).toContain("runs-on: ubuntu-latest");
+    expect(workflow).not.toContain("runs-on: [self-hosted");
+    expect(workflow).not.toContain("command -v python3 aws ssh");
     expect(workflow).not.toContain("git bundle create");
     expect(workflow).not.toContain("sudo docker build");
   });

@@ -1,0 +1,61 @@
+---
+schemaVersion: '2.2'
+description: Deploy or roll back the nft_minting immutable ECR image.
+parameters:
+  Action: {type: String, default: deploy, allowedValues: [deploy, rollback], interpolationType: ENV_VAR}
+  ImageUri:
+    type: String
+    default: ''
+    allowedPattern: '^$|^076472863936\.dkr\.ecr\.us-east-1\.amazonaws\.com/korion/prod/foxya/nft-minting@sha256:[0-9a-f]{64}$'
+    interpolationType: ENV_VAR
+  SourceSha: {type: String, default: '', allowedPattern: '^$|^[0-9a-f]{6,40}$', interpolationType: ENV_VAR}
+  ExpectedCurrentImage:
+    type: String
+    default: ''
+    allowedPattern: '^$|^076472863936\.dkr\.ecr\.us-east-1\.amazonaws\.com/korion/prod/foxya/nft-minting@sha256:[0-9a-f]{64}$'
+    interpolationType: ENV_VAR
+mainSteps:
+  - action: aws:runShellScript
+    name: deployNftMinting
+    precondition: {StringEquals: [platformType, Linux]}
+    inputs:
+      timeoutSeconds: '900'
+      runCommand:
+        - |
+          #!/usr/bin/env bash
+          [ -n "${BASH_VERSION:-}" ] || exec /usr/bin/env bash "$0" "$@"
+          set -euo pipefail
+          action=${SSM_Action:?Action is required}; image_uri=${SSM_ImageUri:-}; source_sha=${SSM_SourceSha:-}; expected_current=${SSM_ExpectedCurrentImage:-}
+          region=us-east-1; registry=076472863936.dkr.ecr.us-east-1.amazonaws.com; repository=korion/prod/foxya/nft-minting
+          container=nft-minting; candidate=nft-minting-candidate; network=coin-shared; env_file=/etc/korion/nft-minting/amoy.env
+          state_file=/var/lib/korion-deploy/nft-minting.env; health_url=http://127.0.0.1:8088/health
+          image_pattern='^076472863936\.dkr\.ecr\.us-east-1\.amazonaws\.com/korion/prod/foxya/nft-minting@sha256:[0-9a-f]{64}$'
+          exec 9>/var/lock/korion-nft-minting-deploy.lock; flock -n 9 || exit 1
+          test -s "$state_file" && test -s "$env_file" || { echo 'deployment state or env file is missing' >&2; exit 1; }
+          state=$(cat "$state_file"); current=$(sed -n 's/^CURRENT_IMAGE=//p' <<<"$state"); previous=$(sed -n 's/^PREVIOUS_IMAGE=//p' <<<"$state")
+          current_sha=$(sed -n 's/^CURRENT_SOURCE_SHA=//p' <<<"$state"); previous_sha=$(sed -n 's/^PREVIOUS_SOURCE_SHA=//p' <<<"$state")
+          [[ "$current" =~ $image_pattern ]] || { echo 'invalid current deployment state' >&2; exit 1; }
+          write_state(){ local a=$1 b=$2 c=$3 d=$4 tmp; tmp=$(mktemp); printf 'CURRENT_IMAGE=%s\nPREVIOUS_IMAGE=%s\nCURRENT_SOURCE_SHA=%s\nPREVIOUS_SOURCE_SHA=%s\n' "$a" "$b" "$c" "$d" > "$tmp"; install -o root -g root -m 0600 "$tmp" "${state_file}.new"; mv "${state_file}.new" "$state_file"; rm -f "$tmp"; }
+          activate(){
+            local target=$1 old_container="${container}-rollback"
+            docker rm -f "$candidate" >/dev/null 2>&1 || true
+            docker run -d --name "$candidate" --restart unless-stopped --network "$network" --env-file "$env_file" "$target" >/dev/null
+            for i in $(seq 1 30); do if docker exec "$candidate" wget -qO- "$health_url" >/dev/null; then break; fi; if [[ $i == 30 ]]; then docker logs "$candidate" >&2 || true; docker rm -f "$candidate" >/dev/null 2>&1 || true; return 1; fi; sleep 2; done
+            docker rm -f "$old_container" >/dev/null 2>&1 || true; docker rename "$container" "$old_container"; docker rename "$candidate" "$container"
+            if ! docker exec "$container" wget -qO- "$health_url" >/dev/null; then docker rm -f "$container" >/dev/null 2>&1 || true; docker rename "$old_container" "$container"; return 1; fi
+            docker rm -f "$old_container" >/dev/null 2>&1 || true
+          }
+          docker_config=$(mktemp -d); export DOCKER_CONFIG="$docker_config"; cleanup(){ docker rm -f "$candidate" >/dev/null 2>&1 || true; docker logout "$registry" >/dev/null 2>&1 || true; find "$docker_config" -mindepth 1 -delete; rmdir "$docker_config" || true; }; trap cleanup EXIT
+          aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null 2>&1
+          if [[ "$action" == rollback ]]; then
+            [[ "$previous" =~ $image_pattern && "$previous" != "$current" ]] || exit 1; docker pull "$current" >/dev/null; docker pull "$previous" >/dev/null
+            [[ $(docker inspect --format '{{.Image}}' "$container") == $(docker image inspect --format '{{.Id}}' "$current") ]] || exit 1
+            activate "$previous"; write_state "$previous" "$current" "$previous_sha" "$current_sha"; exit 0
+          fi
+          [[ "$image_uri" =~ $image_pattern && "$source_sha" =~ ^[0-9a-f]{6,40}$ ]] || exit 2
+          [[ "$expected_current" == "$current" ]] || { echo 'ECR current differs from managed-node state' >&2; exit 1; }
+          [[ "$image_uri" != "$current" ]] || { echo 'requested digest is already current'; exit 0; }
+          docker pull "$current" >/dev/null; docker pull "$image_uri" >/dev/null
+          [[ $(docker inspect --format '{{.Image}}' "$container") == $(docker image inspect --format '{{.Id}}' "$current") ]] || exit 1
+          if ! activate "$image_uri"; then activate "$current" || true; exit 1; fi
+          write_state "$image_uri" "$current" "$source_sha" "$current_sha"; echo "deployed ${image_uri}"

@@ -46,4 +46,13 @@ describe("ECR deployment scripts", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("previous image");
   });
+
+  it("targets the custom SSM document without exposing the env file", () => {
+    const result = run("deploy-via-ssm.sh", { IMAGE_URI: image, SOURCE_SHA: "abc123" });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Korion-Deploy-NftMinting-Ecr");
+    expect(result.stdout).toContain("i-0958ccd4996b013d4");
+    expect(result.stdout).not.toContain("amoy.env contents");
+  });
 });

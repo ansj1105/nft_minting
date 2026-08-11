@@ -39,6 +39,7 @@ jobs:
       digest: ${{ steps.build.outputs.digest }}
       region: ${{ steps.delivery.outputs.region }}
       role_arn: ${{ steps.delivery.outputs.role_arn }}
+      deployer_role_arn: ${{ steps.delivery.outputs.deployer_role_arn }}
       registry: ${{ steps.delivery.outputs.registry }}
       repository: ${{ steps.delivery.outputs.repository }}
     steps:
@@ -53,7 +54,8 @@ jobs:
           if (!image) throw new Error('nft-minting image definition is missing');
           const values = {
             region: manifest.awsRegion,
-            role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
+             role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.publisherRoleName}`,
+             deployer_role_arn: `arn:aws:iam::${manifest.accountId}:role/${manifest.deployerRoleName}`,
             registry: `${manifest.accountId}.dkr.ecr.${manifest.awsRegion}.amazonaws.com`,
             repository: image.repository,
             context: image.context,
@@ -80,19 +82,17 @@ jobs:
 
   deploy:
     needs: build_push
-    runs-on: [self-hosted, linux, x64, production, deploy]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Verify deploy runner tools
-        run: command -v python3 aws ssh >/dev/null
       - uses: aws-actions/configure-aws-credentials@v6.2.3
         with:
-          role-to-assume: ${{ needs.build_push.outputs.role_arn }}
+          role-to-assume: ${{ needs.build_push.outputs.deployer_role_arn }}
           aws-region: ${{ needs.build_push.outputs.region }}
       - name: Deploy exact digest and promote pointers
         env:
           IMAGE_URI: ${{ needs.build_push.outputs.registry }}/${{ needs.build_push.outputs.repository }}@${{ needs.build_push.outputs.digest }}
           SOURCE_SHA: ${{ github.sha }}
           ECR_CONFIG: deploy/ecr-images.json
-        run: bash scripts/deploy-ecr-image.sh
+         run: bash scripts/deploy-via-ssm.sh

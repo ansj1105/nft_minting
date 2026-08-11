@@ -9,6 +9,7 @@ const validManifest = {
   awsRegion: "us-east-1",
   accountId: "076472863936",
   publisherRoleName: "KorionGitHubEcrPublisherRole",
+  deployerRoleName: "KorionNftMintingSsmDeployRole",
   images: [
     {
       key: "nft-minting",
@@ -21,6 +22,8 @@ const validManifest = {
       platform: "linux/amd64",
       deployment: {
         driver: "docker-run",
+        instanceId: "i-0958ccd4996b013d4",
+        ssmDocument: "Korion-Deploy-NftMinting-Ecr",
         endpoint: "ubuntu@52.200.97.155",
         container: "nft-minting",
         candidateContainer: "nft-minting-candidate",
@@ -46,6 +49,8 @@ describe("ECR deployment manifest", () => {
 
     expect(manifest.images[0].repository).toBe("korion/prod/foxya/nft-minting");
     expect(manifest.publisherRoleName).toBe("KorionGitHubEcrPublisherRole");
+    expect(manifest.deployerRoleName).toBe("KorionNftMintingSsmDeployRole");
+    expect(manifest.images[0].deployment.instanceId).toBe("i-0958ccd4996b013d4");
     expect(manifest.images[0].deployment.stateFile).toBe(
       "/var/lib/korion-deploy/nft-minting.env",
     );

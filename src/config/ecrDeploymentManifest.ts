@@ -5,6 +5,8 @@ const secretKeyPattern = /PRIVATE_KEY|SECRET|TOKEN|API_KEY|PASSWORD|MNEMONIC/i;
 
 const deploymentSchema = z.object({
   driver: z.literal("docker-run"),
+  instanceId: z.string().regex(/^i-[0-9a-f]{17}$/),
+  ssmDocument: z.string().regex(/^Korion-Deploy-[A-Za-z0-9-]+-Ecr$/),
   endpoint: z.string().regex(/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/),
   container: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/),
   candidateContainer: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/),
@@ -40,6 +42,7 @@ const manifestSchema = z.object({
   awsRegion: z.string().regex(/^[a-z]{2}-[a-z]+-\d$/),
   accountId: z.string().regex(/^\d{12}$/),
   publisherRoleName: z.string().regex(/^[A-Za-z0-9+=,.@_-]{1,64}$/),
+  deployerRoleName: z.string().regex(/^[A-Za-z0-9+=,.@_-]{1,64}$/),
   images: z.array(imageSchema).min(1),
 }).strict();
 

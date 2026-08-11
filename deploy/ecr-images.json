@@ -3,6 +3,7 @@
   "awsRegion": "us-east-1",
   "accountId": "076472863936",
   "publisherRoleName": "KorionGitHubEcrPublisherRole",
+  "deployerRoleName": "KorionNftMintingSsmDeployRole",
   "images": [
     {
       "key": "nft-minting",
@@ -15,6 +16,8 @@
       "platform": "linux/amd64",
       "deployment": {
         "driver": "docker-run",
+        "instanceId": "i-0958ccd4996b013d4",
+        "ssmDocument": "Korion-Deploy-NftMinting-Ecr",
         "endpoint": "ubuntu@52.200.97.155",
         "container": "nft-minting",
         "candidateContainer": "nft-minting-candidate",
